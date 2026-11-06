@@ -278,6 +278,39 @@
     <div class="tile"><div class="k">Next milestone</div><div class="v" id="tMile">—</div><div class="s" id="tMileSub">The next round number you're chasing.</div></div>
   </div>
 
+  <!-- WEEK FOR DAD — Fri to Wed, Thursday is bonus only -->
+  <section class="arena" id="weekSection">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h3 style="font-size:26px;margin:0">This week, at a glance</h3>
+      <span id="weekVs" style="font-size:15px;color:var(--muted)"></span>
+    </div>
+    <div style="display:grid;grid-template-columns:1.15fr 1fr;gap:12px;margin-top:14px" id="weekGrid">
+      <div class="panel" style="border:2px solid var(--gold)">
+        <div class="k">THIS WEEK</div>
+        <div id="weekThisDates" style="color:var(--muted);font-size:14px;margin-top:2px">Fri – Wed</div>
+        <div style="display:flex;gap:28px;align-items:flex-end;flex-wrap:wrap;margin-top:10px">
+          <div><div style="font-size:58px;font-weight:800;line-height:1" id="weekThisCount">—</div><div style="color:var(--muted)">puzzles</div></div>
+          <div><div style="font-size:58px;font-weight:800;line-height:1" id="weekThisAcc">—</div><div style="color:var(--muted)">accuracy</div></div>
+        </div>
+        <div class="bar" style="margin-top:16px"><i id="weekThisBar" style="width:0%"></i></div>
+      </div>
+      <div class="panel">
+        <div class="k">LAST WEEK</div>
+        <div id="weekLastDates" style="color:var(--muted);font-size:14px;margin-top:2px">Fri – Wed</div>
+        <div style="display:flex;gap:28px;align-items:flex-end;flex-wrap:wrap;margin-top:10px">
+          <div><div style="font-size:58px;font-weight:800;line-height:1" id="weekLastCount">—</div><div style="color:var(--muted)">puzzles</div></div>
+          <div><div style="font-size:58px;font-weight:800;line-height:1" id="weekLastAcc">—</div><div style="color:var(--muted)">accuracy</div></div>
+        </div>
+        <div class="bar" style="margin-top:16px"><i id="weekLastBar" style="width:0%"></i></div>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:12px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <div><div class="k">THURSDAY — BONUS ONLY</div><div id="weekThuDates" style="color:var(--muted);font-size:14px;margin-top:2px">Thursday</div></div>
+      <div style="margin-left:auto;text-align:right"><div style="font-size:42px;font-weight:800;line-height:1" id="weekThuCount">—</div><div style="color:var(--muted)">puzzles · <span id="weekThuAcc">—</span> accuracy</div></div>
+    </div>
+    <p style="color:var(--muted);font-size:13px;margin:10px 0 0">Week = Friday to Wednesday. Thursday is club day — bonus only, not counted in the week.</p>
+  </section>
+
   <!-- GAMES ARENA -->
   <section class="arena" id="gamesSection">
     <div class="sec-head">
@@ -1043,7 +1076,7 @@
       .then(done);
 
     // activity stream (NDJSON)
-    lichessFetch("https://lichess.org/api/puzzle/activity?max=220",{headers:{"Accept":"application/x-ndjson","Authorization":"Bearer "+state.token}})
+    lichessFetch("https://lichess.org/api/puzzle/activity?max=1000",{headers:{"Accept":"application/x-ndjson","Authorization":"Bearer "+state.token}})
       .then(function(r){ return r.text().then(function(txt){ if(!r.ok) throw deepErr(r.status, txt, "Your puzzle activity did not load"); return txt; }); })
       .then(function(txt){
         var items=[]; var trimmed=(txt||"").trim();
@@ -1083,12 +1116,56 @@
           var th=((a.puzzle&&a.puzzle.themes)||[]).slice(0,2).join(" · ");
           return '<li><span class="res '+(a.win?"win":"loss")+'">'+(a.win?"✓":"✗")+'</span><span><b>#'+(a.puzzle?a.puzzle.id:"?")+'</b> <span class="meta">· rated '+fmt(a.puzzle?a.puzzle.rating:null)+(th?" · "+th:"")+'</span><br><span class="meta">'+when+'</span></span><a href="https://lichess.org/training/'+(a.puzzle?a.puzzle.id:"")+'" target="_blank" rel="noopener">Retry ↗</a></li>';
         }).join("");
+        renderWeek();
         if(manual) toast("Deep stats unlocked — today, streaks, themes & attempts are live ✓");
       }).catch(function(e){
         if(e && e.status){ if(e.kind==="invalid"||e.kind==="scope") hardVerdict=e; errs.push(e.message+"."); }
         else errs.push("Your puzzle activity did not load — "+((e&&e.message)?e.message:"the request did not get through")+".");
       })
       .then(done);
+  }
+  /* ---------- WEEK FOR DAD: Fri–Wed, Thursday = bonus ----------
+     A week runs Friday 00:00 to Wednesday 24:00 (local time). Thursday is
+     club competition day, so Thursday puzzles are bonus only and never
+     count in the week. If today IS Thursday, this week is the one that
+     just ended on Wednesday, and today is the bonus day. */
+  function weekDayStart(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); }
+  function weekFmt(ts){ var d=new Date(ts); return d.toLocaleDateString("en-GB",{day:"numeric",month:"short"}); }
+  function weekStats(items, start, end){
+    var a=(items||[]).filter(function(x){ return x.date>=start && x.date<end; });
+    var w=a.filter(function(x){ return x.win; }).length;
+    return { n:a.length, acc: a.length ? Math.round(w/a.length*100) : null };
+  }
+  function renderWeek(){
+    var now=new Date(); var today=weekDayStart(now); var dow=now.getDay();
+    var thisFri, thu;
+    if(dow===4){ thisFri=today-6*86400000; thu=today; }
+    else { thisFri=today-(((dow-5+7)%7))*86400000; thu=thisFri-86400000; }
+    var thisWed=thisFri+5*86400000;
+    var lastFri=thisFri-7*86400000; var lastWed=lastFri+5*86400000;
+    var items=state.activity||[];
+    var tw=weekStats(items, thisFri, Math.min(thisWed+86400000, today+86400000));
+    var lw=weekStats(items, lastFri, lastWed+86400000);
+    var th=weekStats(items, thu, thu+86400000);
+    var has=items.length>0;
+    $("weekThisDates").textContent="Fri "+weekFmt(thisFri)+" – Wed "+weekFmt(thisWed);
+    $("weekLastDates").textContent="Fri "+weekFmt(lastFri)+" – Wed "+weekFmt(lastWed);
+    $("weekThuDates").textContent="Thu "+weekFmt(thu)+(dow===4?" · today":"");
+    $("weekThisCount").textContent=has?String(tw.n):"—";
+    $("weekThisAcc").textContent=has?(tw.acc==null?"—":tw.acc+"%"):"—";
+    $("weekLastCount").textContent=has?String(lw.n):"—";
+    $("weekLastAcc").textContent=has?(lw.acc==null?"—":lw.acc+"%"):"—";
+    $("weekThuCount").textContent=has?String(th.n):"—";
+    $("weekThuAcc").textContent=has?(th.acc==null?"—":th.acc+"%"):"—";
+    var mx=Math.max(tw.n, lw.n, 1);
+    $("weekThisBar").style.width=Math.round(tw.n/mx*100)+"%";
+    $("weekLastBar").style.width=Math.round(lw.n/mx*100)+"%";
+    var vs=$("weekVs");
+    if(!has){ vs.textContent=""; }
+    else if(lw.n===0 && tw.n>0){ vs.textContent="First week counted"; }
+    else if(tw.n>lw.n){ vs.textContent="▲ "+(tw.n-lw.n)+" more than last week"; }
+    else if(tw.n<lw.n){ vs.textContent="▼ "+(lw.n-tw.n)+" fewer than last week"; }
+    else { vs.textContent="Same as last week"; }
   }
   function showUserError(m){ var e=$("userError"); e.textContent=m; e.style.display="block"; }
   function showTokenError(m){ var e=$("tokenError"); e.textContent=m; e.style.display="block"; }
@@ -1304,6 +1381,7 @@
     }
   })();
 
+  renderWeek();
   // Default account: aminchess4 — verified snapshot instantly, then live fetch replaces it
   renderBoard("8/8/8/8/8/8/8/8 w - - 0 1");
   loadDaily();
