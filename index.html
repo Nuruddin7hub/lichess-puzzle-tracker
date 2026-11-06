@@ -6,25 +6,6 @@
 <meta name="color-scheme" content="light dark" />
 <link rel="icon" href="data:," />
 <title>Lichess Puzzle Tracker</title>
-<script>
-/* Capture Content-Security-Policy violations from the very start, so the
-   Connection test panel (bottom of page script) can show them in plain
-   text. A blocked fetch to lichess.org caused by this page's host policy
-   (e.g. connect-src on muse.ai) fires this event; a plain network/CORS
-   failure does not — that difference is the diagnosis. */
-window.__cspViolations = [];
-document.addEventListener("securitypolicyviolation", function(e){
-  try{
-    window.__cspViolations.push({
-      directive: e.effectiveDirective || e.violatedDirective || "",
-      blockedURI: e.blockedURI || "",
-      disposition: e.disposition || "",
-      at: new Date().toLocaleTimeString("en-GB")
-    });
-    document.dispatchEvent(new CustomEvent("csp-logged"));
-  }catch(_){}
-});
-</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
@@ -227,13 +208,6 @@ document.addEventListener("securitypolicyviolation", function(e){
   @media(max-width:640px){#deepTiles{grid-template-columns:repeat(2,1fr)!important}}
 
   /* CONNECTION TEST PANEL */
-  .conntest{margin-top:14px;background:var(--panel);border:1.5px solid var(--gold);border-radius:var(--radius);padding:18px 20px}
-  .conntest h3{font-size:19px}
-  .conntest .desc{color:var(--muted);font-size:13.5px;margin:6px 0 0;line-height:1.55}
-  .conn-lines{margin-top:12px;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:13px 15px;font-size:13px;line-height:1.75;white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere}
-  .conn-lines .ok{color:var(--green);font-weight:700}
-  .conn-lines .fail{color:var(--red);font-weight:700}
-  .conntest .btn{margin-top:12px}
 
   .foot{margin-top:26px;color:var(--faint);font-size:12.5px;line-height:1.6;text-align:center}
   .toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,80px);background:var(--ink);color:var(--bg);font-weight:700;padding:13px 20px;border-radius:999px;box-shadow:var(--shadow);transition:.35s;z-index:50;font-size:15px;max-width:92vw;text-align:center}
@@ -248,14 +222,6 @@ document.addEventListener("securitypolicyviolation", function(e){
     <div class="brand"><span class="knight">♞</span><span>Lichess Puzzle Tracker<small>YOUR PUZZLES, COUNTED LIVE</small></span></div>
     <div class="livepill"><span class="dot" id="liveDot"></span><span id="liveText">Not connected yet</span></div>
   </div>
-
-  <!-- CONNECTION TEST — runs on load, plain-text results, screenshot-friendly -->
-  <section class="conntest" id="connTestPanel">
-    <h3>Connection test — is this page allowed to reach Lichess?</h3>
-    <p class="desc">This runs automatically when the page opens, using plain browser fetch — <b>not</b> the tracker's retry queue — so it shows what this page's host actually allows. The same tests pass in Brave from a <span class="mono">file://</span> page (Lichess public API 200, token check 401 as expected). If they fail here, screenshot this whole panel — it names the blocker.</p>
-    <div class="conn-lines mono" id="connLines">Connection test starting…</div>
-    <button class="btn ghost small" id="connRetestBtn" type="button">Run connection test again</button>
-  </section>
 
   <!-- CONNECT -->
   <section class="connect" id="connectCard">
@@ -283,6 +249,7 @@ document.addEventListener("securitypolicyviolation", function(e){
           <div><h2 id="whoName">—</h2><p id="whoMeta">—</p></div>
           <button class="btn ghost small" id="changeUserBtn" type="button">Change user</button>
           <button class="btn ghost small" id="refreshBtn" type="button">↻ Refresh now</button>
+          <button class="btn ghost small" id="deepRetryTop" type="button">↻ Retry deep stats</button>
         </div>
         <div class="count-label">Total puzzles played — live</div>
         <div class="bigcount" id="bigCount">0</div>
@@ -974,7 +941,7 @@ document.addEventListener("securitypolicyviolation", function(e){
     var delays=[8000,20000,45000,90000];
     var delay=delays[Math.min(state.deepRetries, delays.length-1)];
     state.deepRetries++;
-    setTokenStatus("⏳ <b>Token saved on this phone — deep stats not loaded yet.</b> Lichess did not answer the last try. This page will retry by itself in about "+Math.round(delay/1000)+" seconds — keep this tab open — or tap <b>Retry deep stats</b> below to try right away. Your token stays saved either way; there is nothing to paste again.");
+    setTokenStatus("⏳ <b>Token saved on this phone — deep stats not loaded yet.</b> Lichess did not answer the last try. This page will retry by itself in about "+Math.round(delay/1000)+" seconds — keep this tab open — or tap <b>Retry deep stats</b> at the top to try right away. Your token stays saved either way; there is nothing to paste again.");
     state.deepRetryTimer=setTimeout(function(){ state.deepRetryTimer=null; loadDeep(false); }, delay);
   }
   /* Validate the token with GET /api/account: an ordinary authenticated
@@ -1271,6 +1238,12 @@ document.addEventListener("securitypolicyviolation", function(e){
     setTokenStatus("⏳ <b>Retrying your deep stats…</b>");
     loadDeep(true);
   });
+  // Top Retry button (in the hero, so no scrolling): same action as the
+  // Retry button below. If no token is saved yet, scroll to the token box.
+  $("deepRetryTop").addEventListener("click", function(){
+    if(!state.token){ var el=$("tokenInput"); if(el) el.scrollIntoView({behavior:"smooth", block:"center"}); if(el) el.focus(); setTokenStatus("Paste your token below first, then tap Unlock deep stats."); return; }
+    $("deepRetry").click();
+  });
   /* Coming back to this tab, or the connection coming back, is a natural
      moment for the serialized queue to try the deep stats again. */
   document.addEventListener("visibilitychange", function(){
@@ -1308,21 +1281,18 @@ document.addEventListener("securitypolicyviolation", function(e){
       state.token=st; state.remembered=true;
       $("tokenDisconnect").classList.remove("hidden");
       setTokenStatus("✓ <b>Token remembered on this phone.</b> Reconnecting your deep stats automatically — no paste needed. Tap Disconnect token below if you ever want this browser to forget it.");
+      // Load deep stats immediately — don't wait for the token re-check
+      // (that check used to sit ahead of them in the queue, which is why
+      // a refresh took ~15s before the deep stats appeared).
+      $("deepRetry").classList.remove("hidden");
+      loadDeep(false);
       // Confirm with Lichess in the background; if it was revoked or lost
       // puzzle:read meanwhile, forget it here too and say why.
       testToken(st).then(function(info){
         state.tokenUser=info.name;
         setTokenStatus("✓ <b>Token connected — remembered from last time.</b> Lichess confirms this token belongs to <b>@"+info.name+"</b>. Your deep stats load automatically every visit now.");
-        $("deepRetry").classList.remove("hidden");
-        loadDeep(false);
       }).catch(function(e){
         if(e && e.kind==="network"){
-          /* A dropped connection is not a bad token: keep it saved on this
-             phone and try the deep stats directly — never wipe it over a
-             network hiccup. */
-          setTokenStatus("⏳ <b>Token remembered on this phone.</b> Lichess couldn't be reached to re-check it just now, so it stays saved here — your deep stats will load as soon as the connection answers. Nothing to paste again.");
-          $("deepRetry").classList.remove("hidden");
-          loadDeep(false);
           return;
         }
         state.token=null; state.remembered=false; lsDel(LS.token);
@@ -1334,110 +1304,11 @@ document.addEventListener("securitypolicyviolation", function(e){
     }
   })();
 
-  /* ---------- CONNECTION TEST PANEL ----------
-     Deliberately independent of lichessFetch / the queue above: plain raw
-     fetch, run once on load, results written as plain text on the page so
-     they can be screenshotted without DevTools. Reference result (Kind,
-     Brave on his computer, page origin file://): public API OK 200
-     (274 puzzles, rating 1271), /api/account with a dummy Bearer OK —
-     Lichess answered 401 {"error":"No such token"}, proving CORS +
-     preflight + Authorization all pass there; XHR OK; httpbin OK.
-     So if these same tests FAIL from this page, the difference is this
-     page's origin/host (muse.ai, inside its iframe) — not Lichess, not
-     the browser, not the network, and not the token. The token value
-     itself is never printed, only whether Lichess answered. */
-  var connTest = { running:false, lines:[], cspIdx:-1 };
-  function connRender(){ var el=$("connLines"); if(el) el.textContent = connTest.lines.join("\n"); }
-  function connPush(text){ connTest.lines.push(text); connRender(); return connTest.lines.length-1; }
-  function connSet(idx, text){ if(idx>=0 && idx<connTest.lines.length){ connTest.lines[idx]=text; connRender(); } }
-  function connCspText(){
-    var v = window.__cspViolations || [];
-    if(!v.length) return "CSP violations: none captured so far";
-    return "CSP violations: "+v.length+" captured — "+v.map(function(x){ return "["+x.at+"] "+x.directive+" blocked "+x.blockedURI+(x.disposition?" ("+x.disposition+")":""); }).join(" · ");
-  }
-  function connTimedFetch(url, opts){
-    var started = Date.now();
-    var ctrl = ("AbortController" in window) ? new AbortController() : null;
-    var to = setTimeout(function(){ if(ctrl) ctrl.abort(); }, 12000);
-    var o = { method:"GET", headers:(opts&&opts.headers)||{}, mode:"cors", credentials:"omit", cache:"no-store", referrerPolicy:"no-referrer" };
-    if(ctrl) o.signal = ctrl.signal;
-    return fetch(url, o).then(function(r){
-      return r.text().then(function(txt){ clearTimeout(to); return {ms:Date.now()-started, status:r.status, txt:txt||""}; });
-    }, function(err){ clearTimeout(to); err._ms = Date.now()-started; throw err; });
-  }
-  function runConnectionTest(){
-    if(connTest.running) return;
-    connTest.running = true;
-    connTest.lines = [];
-    var btn = $("connRetestBtn"); if(btn) btn.disabled = true;
-    var origin = "";
-    try{ origin = window.location.origin || ""; }catch(e){ origin = ""; }
-    if(!origin || origin==="null") origin = "null — opaque origin (this page is in a sandboxed iframe, so the browser hides its real origin)";
-    connPush("origin: "+origin);
-    var inIframe;
-    try{ inIframe = (window.self !== window.top); }catch(e){ inIframe = true; }
-    connPush("in iframe: "+(inIframe ? "yes" : "no"));
-    connPush("online: "+(navigator.onLine ? "true" : "false"));
-    connTest.cspIdx = connPush(connCspText());
-    var userForTest = state.user || "aminchess4";
-    var idx1 = connPush("1 fetch lichess public, no token: running…");
-    var test1Ok = false, test2Through = null;
-    connTimedFetch("https://lichess.org/api/user/"+encodeURIComponent(userForTest), {headers:{"Accept":"application/json"}})
-      .then(function(res){
-        test1Ok = true;
-        var extra = "";
-        try{ var d = JSON.parse(res.txt); var pz = (d.perfs&&d.perfs.puzzle)||{}; if(pz.games!=null) extra = " puzzles="+pz.games+" rating="+pz.rating; }catch(e){}
-        connSet(idx1, "1 fetch lichess public, no token: OK in "+res.ms+"ms -> HTTP "+res.status+extra);
-      }, function(err){
-        connSet(idx1, "1 fetch lichess public, no token: FAIL in "+(err._ms||0)+"ms -> "+((err&&err.name)||"Error")+": "+((err&&err.message)||err));
-      })
-      .then(function(){
-        connSet(connTest.cspIdx, connCspText());
-        var savedTok = state.token || sanitizeToken(lsGet(LS.token)||"");
-        if(!savedTok){
-          connPush("2 fetch lichess /api/account, saved token: SKIPPED — no token is saved on this browser yet (paste it in the token box below, then run this test again)");
-          test2Through = false;
-          return null;
-        }
-        var idx2 = connPush("2 fetch lichess /api/account, saved token: running… (token itself is never shown)");
-        return connTimedFetch("https://lichess.org/api/account", {headers:{"Accept":"application/json","Authorization":"Bearer "+savedTok}})
-          .then(function(res){
-            test2Through = true;
-            var extra = "";
-            if(res.status===200){ try{ var d2 = JSON.parse(res.txt); extra = " account=@"+(d2.username||d2.id||"?")+" — Lichess accepts the saved token"; }catch(e){} }
-            else { extra = " body="+res.txt.slice(0,120)+" — the request got through; this HTTP status is Lichess's verdict on the token, not a connection failure"; }
-            connSet(idx2, "2 fetch lichess /api/account, saved token: ANSWERED in "+res.ms+"ms -> HTTP "+res.status+extra);
-          }, function(err){
-            test2Through = false;
-            connSet(idx2, "2 fetch lichess /api/account, saved token: FAIL in "+(err._ms||0)+"ms -> "+((err&&err.name)||"Error")+": "+((err&&err.message)||err));
-          });
-      })
-      .then(function(){
-        connSet(connTest.cspIdx, connCspText());
-        var cspHit = (window.__cspViolations||[]).length>0;
-        if(!test1Ok){
-          connPush("Verdict: Lichess is NOT reachable from THIS page's origin — yet the identical fetch passes from a file:// page in the same Brave (public API 200, token check answered 401). That points to this page's host / origin (muse.ai, in its iframe) blocking the cross-site fetch — not Lichess, not your network, and not the token."+(cspHit ? " A CSP violation was captured above, which confirms the host's security policy blocked it." : " No CSP event was captured, so the block may come from the iframe / host network policy rather than a CSP header."));
-        } else if(test2Through===false && state.token){
-          connPush("Verdict: public Lichess IS reachable from this origin, but the token request did not get through — compare line 2 above with line 1.");
-        } else {
-          connPush("Verdict: Lichess IS reachable from this page's origin right now (line 1 answered"+(test2Through ? ", and the token request was answered too" : "")+"). If the deep-stats box below still shows an error, it is not this page being blocked from Lichess.");
-        }
-        connPush("DONE — screenshot this panel if the tracker still fails.");
-        connTest.running = false;
-        if(btn) btn.disabled = false;
-      });
-  }
-  $("connRetestBtn").addEventListener("click", runConnectionTest);
-  document.addEventListener("csp-logged", function(){ if(!connTest.running) connSet(connTest.cspIdx, connCspText()); });
-
   // Default account: aminchess4 — verified snapshot instantly, then live fetch replaces it
   renderBoard("8/8/8/8/8/8/8/8 w - - 0 1");
   loadDaily();
   showSnapshot();
   startTracking(($("usernameInput").value||"aminchess4").trim().replace(/^@/,"") || "aminchess4", true);
-  // Connection test runs on load, slightly after the first tracker fetch
-  // so the two don't collide in the same instant.
-  setTimeout(runConnectionTest, 900);
 })();
 </script>
 </body>
