@@ -1,0 +1,1444 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Lichess Puzzle Tracker</title>
+<script>
+/* Capture Content-Security-Policy violations from the very start, so the
+   Connection test panel (bottom of page script) can show them in plain
+   text. A blocked fetch to lichess.org caused by this page's host policy
+   (e.g. connect-src on muse.ai) fires this event; a plain network/CORS
+   failure does not — that difference is the diagnosis. */
+window.__cspViolations = [];
+document.addEventListener("securitypolicyviolation", function(e){
+  try{
+    window.__cspViolations.push({
+      directive: e.effectiveDirective || e.violatedDirective || "",
+      blockedURI: e.blockedURI || "",
+      disposition: e.disposition || "",
+      at: new Date().toLocaleTimeString("en-GB")
+    });
+    document.dispatchEvent(new CustomEvent("csp-logged"));
+  }catch(_){}
+});
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0e0c0a; --bg2:#161310; --panel:#1c1915; --panel2:#24201b; --line:#332c24;
+    --ink:#f5efe6; --muted:#b8ab9a; --faint:#8a7d6d;
+    --gold:#e8a33d; --gold2:#f2c063; --brown:#b58863; --green:#7fb069; --red:#e06c5a; --teal:#5ec8b8;
+    --board-l:#ecdcc0; --board-d:#b58863;
+    --shadow:0 18px 50px rgba(0,0,0,.45);
+    --radius:20px;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#f4efe7; --bg2:#efe8dc; --panel:#fffdf9; --panel2:#f7f1e6; --line:#e2d7c5;
+      --ink:#1d1812; --muted:#6d6050; --faint:#9a8c78;
+      --gold:#c47f17; --gold2:#a86f10; --brown:#9a6b44; --green:#4d7d3a; --red:#c24e3c; --teal:#1f7a6d;
+      --shadow:0 18px 40px rgba(90,70,40,.14);
+    }
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:"Outfit",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  a{color:var(--gold)}
+  button,input{font:inherit}
+  .wrap{max-width:1120px;margin:0 auto;padding:18px 16px 56px}
+  /* header strip */
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 2px 14px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.02em}
+  .brand .knight{width:38px;height:38px;border-radius:11px;background:var(--ink);color:var(--bg);display:grid;place-items:center;font-size:22px;line-height:1}
+  .brand small{display:block;font-weight:500;color:var(--muted);font-size:12px;letter-spacing:.04em}
+  .livepill{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:7px 12px;font-size:13px;color:var(--muted)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--faint);flex:none}
+  .dot.on{background:#58c472;box-shadow:0 0 0 5px rgba(88,196,114,.18);animation:pulse 1.8s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(88,196,114,.35)}70%{box-shadow:0 0 0 7px rgba(88,196,114,0)}100%{box-shadow:0 0 0 0 rgba(88,196,114,0)}}
+  @media (prefers-reduced-motion: reduce){.dot.on{animation:none} *{scroll-behavior:auto!important}}
+
+  h1,h2,h3{font-family:"Bricolage Grotesque",sans-serif;line-height:.95;margin:0}
+  .mono{font-family:"JetBrains Mono",monospace}
+
+  /* CONNECT */
+  .connect{background:linear-gradient(180deg,var(--panel),var(--bg2));border:1px solid var(--line);border-radius:28px;padding:26px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+  .connect::after{content:"";position:absolute;inset:auto -40px -70px auto;width:260px;height:260px;opacity:.14;background:conic-gradient(from 0deg,var(--board-l) 0 25%,var(--board-d) 0 50%,var(--board-l) 0 75%,var(--board-d) 0);background-size:52px 52px;border-radius:24px;transform:rotate(12deg);pointer-events:none}
+  .connect h1{font-size:clamp(34px,6vw,58px);font-weight:800;max-width:640px}
+  .connect h1 em{font-style:normal;color:var(--gold)}
+  .connect p.lead{color:var(--muted);font-size:17px;line-height:1.55;max-width:560px;margin:14px 0 0}
+  .formrow{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px;position:relative;z-index:1}
+  .formrow input[type=text]{flex:1 1 220px;background:var(--bg);border:1.5px solid var(--line);color:var(--ink);border-radius:14px;padding:14px 16px;font-size:17px;outline:none}
+  .formrow input[type=text]:focus{border-color:var(--gold)}
+  .btn{border:0;border-radius:14px;padding:14px 20px;font-weight:700;cursor:pointer;background:var(--gold);color:#1a1206}
+  .btn:active{transform:scale(.98)}
+  .btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
+  .btn.small{padding:9px 14px;border-radius:11px;font-size:14px}
+  .hint{font-size:13px;color:var(--faint);margin-top:10px;position:relative;z-index:1}
+  .err{display:none;margin-top:12px;background:rgba(224,108,90,.12);border:1px solid rgba(224,108,90,.4);color:var(--red);padding:11px 14px;border-radius:12px;font-size:14px;position:relative;z-index:1}
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:22px;position:relative;z-index:1}
+  .step{background:var(--panel2);border:1px solid var(--line);border-radius:16px;padding:14px}
+  .step b{display:flex;align-items:center;gap:8px;font-size:14px}
+  .step b i{font-style:normal;width:22px;height:22px;border-radius:50%;background:var(--gold);color:#1a1206;display:grid;place-items:center;font-size:12px;flex:none}
+  .step p{margin:7px 0 0;color:var(--muted);font-size:13.5px;line-height:1.5}
+  @media(max-width:640px){.steps{grid-template-columns:1fr}}
+
+  /* HERO COUNTER */
+  .hero{display:none;margin-top:16px;background:var(--panel);border:1px solid var(--line);border-radius:28px;box-shadow:var(--shadow);overflow:hidden}
+  .hero.show{display:block}
+  .hero-main{padding:26px 26px 8px;display:grid;grid-template-columns:1.5fr .9fr;gap:22px}
+  @media(max-width:760px){.hero-main{grid-template-columns:1fr}}
+  .who{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .avatar{width:46px;height:46px;border-radius:14px;background:var(--gold);color:#1a1206;display:grid;place-items:center;font-family:"Bricolage Grotesque";font-weight:800;font-size:20px}
+  .who h2{font-size:24px}
+  .who p{margin:2px 0 0;color:var(--muted);font-size:13.5px}
+  .count-label{margin-top:20px;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);font-weight:700}
+  .bigcount{font-family:"JetBrains Mono",monospace;font-weight:700;font-size:clamp(64px,13vw,118px);line-height:1;letter-spacing:-.03em;margin:2px 0 0}
+  .bigcount.bump{animation:bump .6s ease}
+  @keyframes bump{0%{transform:scale(1)}30%{transform:scale(1.045);color:var(--gold)}100%{transform:scale(1)}}
+  .subcount{color:var(--muted);font-size:15px;margin-top:8px;line-height:1.5}
+  .subcount strong{color:var(--ink)}
+  .pluspop{display:inline-block;background:var(--green);color:#fff;font-weight:700;border-radius:999px;padding:2px 10px;font-size:13px;margin-left:8px;opacity:0;transform:translateY(4px);transition:.3s}
+  .pluspop.show{opacity:1;transform:translateY(0)}
+  .ringbox{display:flex;flex-direction:column;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);border-radius:22px;padding:18px}
+  .ringwrap{position:relative;width:148px;height:148px}
+  .ringwrap svg{transform:rotate(-90deg)}
+  .ring-c{position:absolute;inset:0;display:grid;place-items:center;text-align:center}
+  .ring-c b{font-family:"JetBrains Mono";font-size:26px;display:block}
+  .ring-c span{font-size:11.5px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+  .ringbox p{margin:0;color:var(--muted);font-size:13px;text-align:center;line-height:1.45}
+  .goalrow{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--muted)}
+  .goalrow input{width:56px;background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:5px 8px;text-align:center}
+  .levelbar{padding:6px 26px 24px}
+  .leveltop{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:13.5px;color:var(--muted)}
+  .leveltop b{color:var(--ink)}
+  .bar{height:12px;background:var(--bg2);border:1px solid var(--line);border-radius:999px;overflow:hidden;margin-top:9px}
+  .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--brown),var(--gold));border-radius:999px;transition:width .8s ease;width:0%}
+
+  /* TILES */
+  .tiles{display:none;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px}
+  .tiles.show{display:grid}
+  @media(max-width:900px){.tiles{grid-template-columns:repeat(2,1fr)}}
+  .tile{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
+  .tile .k{font-size:11.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint);font-weight:700;display:flex;justify-content:space-between;align-items:center}
+  .tile .v{font-family:"JetBrains Mono";font-weight:700;font-size:clamp(26px,4vw,36px);margin-top:8px;line-height:1}
+  .tile .s{color:var(--muted);font-size:13px;margin-top:7px;line-height:1.45}
+  .up{color:var(--green);font-weight:700}.down{color:var(--red);font-weight:700}
+  .flame{font-size:20px}
+
+  /* PANELS */
+  .grid2{display:none;grid-template-columns:1.35fr 1fr;gap:12px;margin-top:12px}
+  .grid2.show{display:grid}
+  @media(max-width:900px){.grid2{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:20px}
+  .panel h3{font-size:20px;font-weight:800}
+  .panel .desc{color:var(--muted);font-size:13.5px;margin:6px 0 0;line-height:1.5}
+  .chartbox{margin-top:14px}
+  .chartbox svg{width:100%;height:auto;display:block}
+  .axis{font-size:10.5px;fill:var(--faint);font-family:"JetBrains Mono"}
+  .thembar{margin-top:12px}
+  .thembar .row{display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:5px}
+  .thembar .row span:last-child{font-family:"JetBrains Mono";color:var(--muted)}
+  .thembar .track{height:9px;background:var(--bg2);border:1px solid var(--line);border-radius:99px;overflow:hidden}
+  .thembar .track i{display:block;height:100%;background:var(--teal)}
+  .thembar .track i.low{background:var(--red)} .thembar .track i.mid{background:var(--gold)}
+  .attempts{list-style:none;margin:14px 0 0;padding:0;display:grid;gap:8px;max-height:308px;overflow:auto}
+  .attempts li{display:flex;align-items:center;gap:10px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:9px 12px;font-size:13.5px}
+  .attempts .res{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font-weight:800;flex:none;font-size:13px}
+  .win{background:rgba(127,176,105,.2);color:var(--green)} .loss{background:rgba(224,108,90,.16);color:var(--red)}
+  .attempts .meta{color:var(--muted);font-size:12.5px}
+  .attempts a{margin-left:auto;font-size:12.5px;white-space:nowrap}
+
+  /* achievements */
+  .badges{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:14px}
+  @media(max-width:560px){.badges{grid-template-columns:repeat(2,1fr)}}
+  .badge{border:1px solid var(--line);border-radius:14px;padding:12px;background:var(--panel2);opacity:.45}
+  .badge.got{opacity:1;border-color:var(--gold)}
+  .badge .ic{font-size:22px}
+  .badge b{display:block;font-size:13.5px;margin-top:5px}
+  .badge span{font-size:12px;color:var(--muted)}
+
+  /* GAMES ARENA + MODES */
+  .arena{display:none;margin-top:14px}
+  .arena.show{display:block}
+  .sec-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin:2px 2px 10px}
+  .sec-head h3{font-size:26px;font-weight:800}
+  .sec-head p{color:var(--muted);font-size:13.5px;margin:5px 0 0;line-height:1.5;max-width:620px}
+  .arena-grid{display:grid;grid-template-columns:1.35fr 1fr;gap:12px}
+  @media(max-width:900px){.arena-grid{grid-template-columns:1fr}}
+  .speedrow{display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .speedrow:last-child{border-bottom:0;padding-bottom:2px}
+  .speedrow .nm{flex:0 0 112px}
+  .speedrow .nm b{display:block;font-size:15.5px}
+  .speedrow .nm span{font-size:12px;color:var(--faint)}
+  .speedrow .rt{font-family:"JetBrains Mono",monospace;font-weight:700;font-size:27px;min-width:70px;line-height:1}
+  .speedrow .rtrack{flex:1 1 90px;height:8px;background:var(--bg2);border:1px solid var(--line);border-radius:99px;overflow:hidden;min-width:80px}
+  .speedrow .rtrack i{display:block;height:100%;background:linear-gradient(90deg,var(--brown),var(--gold))}
+  .speedrow .meta{text-align:right;font-size:12.5px;color:var(--muted);line-height:1.55;min-width:104px}
+  .speedrow .meta b{color:var(--ink);font-family:"JetBrains Mono",monospace}
+  @media(max-width:560px){.speedrow .meta{text-align:left}}
+  .wld{display:flex;height:16px;border-radius:99px;overflow:hidden;border:1px solid var(--line);margin-top:14px;background:var(--bg2)}
+  .wld i{display:block;height:100%}
+  .wld .w{background:var(--green)} .wld .l{background:var(--red)} .wld .d{background:var(--faint)}
+  .wld-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-top:9px}
+  .wld-legend b{font-family:"JetBrains Mono",monospace;color:var(--ink)}
+  .kv{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+  .kv:last-child{border-bottom:0}
+  .kv span{color:var(--muted)} .kv b{font-family:"JetBrains Mono",monospace;text-align:right}
+  .perfdetails{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px}
+  @media(max-width:900px){.perfdetails{grid-template-columns:1fr}}
+  .actrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:11px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+  .actrow:last-child{border-bottom:0}
+  .actrow .day{flex:0 0 86px;font-weight:700;font-size:13px}
+  .modes{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  @media(max-width:900px){.modes{grid-template-columns:1fr}}
+  .modecard .mk{font-size:11.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint);font-weight:700}
+  .modecard .mv{font-family:"JetBrains Mono",monospace;font-weight:700;font-size:clamp(38px,5vw,52px);line-height:1;margin-top:10px}
+  .modecard .ms{color:var(--muted);font-size:13.5px;margin-top:7px;line-height:1.5}
+  .modecard .cta{margin-top:14px;display:inline-block;text-decoration:none}
+
+  /* daily puzzle */
+  .daily{margin-top:12px;display:grid;grid-template-columns:300px 1fr;gap:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+  @media(max-width:760px){.daily{grid-template-columns:1fr}}
+  .board{display:grid;grid-template-columns:repeat(8,1fr);aspect-ratio:1;width:100%;max-width:340px;margin:0 auto}
+  .sq{display:grid;place-items:center;font-size:clamp(20px,5.4vw,32px);line-height:1;user-select:none}
+  .sq.l{background:var(--board-l);color:#221a10}.sq.d{background:var(--board-d);color:#221a10}
+  .sq .wk{color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.45)} .sq .bk{color:#171310}
+  .daily-info{padding:22px}
+  .daily-info h3{font-size:24px}
+  .chips{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}
+  .chip{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:5px 11px;font-size:12.5px;color:var(--muted)}
+  .chip b{color:var(--ink)}
+
+  /* token box */
+  .tokenbox{margin-top:12px;background:var(--panel);border:1.5px dashed var(--line);border-radius:var(--radius);padding:20px}
+  .tokenbox h3{font-size:19px}
+  .tokenbox ol{margin:10px 0;color:var(--muted);font-size:14px;line-height:1.65;padding-left:20px}
+  .tokenbox code{background:var(--bg2);border:1px solid var(--line);padding:1px 6px;border-radius:6px;font-size:12.5px}
+  .tokenrow{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}
+  .tokenrow input{flex:1 1 240px;background:var(--bg);border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;color:var(--ink)}
+  .locked-note{color:var(--muted);font-size:13.5px;line-height:1.55}
+  .tokstat{margin-top:12px;background:rgba(127,176,105,.13);border:1px solid rgba(127,176,105,.45);color:var(--ink);padding:11px 14px;border-radius:12px;font-size:14px;line-height:1.55}
+  .tokstat code{background:var(--bg2);border:1px solid var(--line);padding:1px 6px;border-radius:6px;font-size:12.5px}
+  @media(max-width:640px){#deepTiles{grid-template-columns:repeat(2,1fr)!important}}
+
+  /* CONNECTION TEST PANEL */
+  .conntest{margin-top:14px;background:var(--panel);border:1.5px solid var(--gold);border-radius:var(--radius);padding:18px 20px}
+  .conntest h3{font-size:19px}
+  .conntest .desc{color:var(--muted);font-size:13.5px;margin:6px 0 0;line-height:1.55}
+  .conn-lines{margin-top:12px;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:13px 15px;font-size:13px;line-height:1.75;white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere}
+  .conn-lines .ok{color:var(--green);font-weight:700}
+  .conn-lines .fail{color:var(--red);font-weight:700}
+  .conntest .btn{margin-top:12px}
+
+  .foot{margin-top:26px;color:var(--faint);font-size:12.5px;line-height:1.6;text-align:center}
+  .toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,80px);background:var(--ink);color:var(--bg);font-weight:700;padding:13px 20px;border-radius:999px;box-shadow:var(--shadow);transition:.35s;z-index:50;font-size:15px;max-width:92vw;text-align:center}
+  .toast.show{transform:translate(-50%,0)}
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="brand"><span class="knight">♞</span><span>Lichess Puzzle Tracker<small>YOUR PUZZLES, COUNTED LIVE</small></span></div>
+    <div class="livepill"><span class="dot" id="liveDot"></span><span id="liveText">Not connected yet</span></div>
+  </div>
+
+  <!-- CONNECTION TEST — runs on load, plain-text results, screenshot-friendly -->
+  <section class="conntest" id="connTestPanel">
+    <h3>Connection test — is this page allowed to reach Lichess?</h3>
+    <p class="desc">This runs automatically when the page opens, using plain browser fetch — <b>not</b> the tracker's retry queue — so it shows what this page's host actually allows. The same tests pass in Brave from a <span class="mono">file://</span> page (Lichess public API 200, token check 401 as expected). If they fail here, screenshot this whole panel — it names the blocker.</p>
+    <div class="conn-lines mono" id="connLines">Connection test starting…</div>
+    <button class="btn ghost small" id="connRetestBtn" type="button">Run connection test again</button>
+  </section>
+
+  <!-- CONNECT -->
+  <section class="connect" id="connectCard">
+    <h1>Every puzzle you solve, <em>counted automatically.</em></h1>
+    <p class="lead">Already set to your account — <strong>aminchess4</strong> — so your live counter loads the moment this page opens. This page reads your public puzzle stats straight from Lichess and re-checks every 20 seconds — solve a puzzle in the Lichess app or website, and watch the counter climb here. No tapping, no manual updates.</p>
+    <form class="formrow" id="userForm">
+      <input type="text" id="usernameInput" value="aminchess4" placeholder="Your Lichess username — e.g. aminchess4" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Lichess username">
+      <button class="btn" type="submit" id="connectBtn">Start tracking →</button>
+    </form>
+    <div class="err" id="userError"></div>
+    <p class="hint">Exactly as it appears on lichess.org, without the @ — not case-sensitive. Change it here anytime to track a different account. Only the username is needed for the live counter, ratings, games, Storm, Streak and Racer. The private puzzle detail (today, win rate, themes, attempts) unlocks with an optional token below.</p>
+    <div class="steps">
+      <div class="step"><b><i>1</i> Enter username</b><p>We fetch your total puzzles, puzzle rating, game ratings (bullet, blitz, rapid), Storm, Streak and Racer bests — all from the public Lichess API.</p></div>
+      <div class="step"><b><i>2</i> Solve anywhere</b><p>Play puzzles on lichess.org or the Lichess phone app — same account, it all counts.</p></div>
+      <div class="step"><b><i>3</i> Watch it climb</b><p>Auto-refresh every 20 seconds. A new solve pops the counter, your goal ring and your streak.</p></div>
+    </div>
+  </section>
+
+  <!-- HERO -->
+  <section class="hero" id="hero">
+    <div class="hero-main">
+      <div>
+        <div class="who">
+          <div class="avatar" id="avatarLetter">?</div>
+          <div><h2 id="whoName">—</h2><p id="whoMeta">—</p></div>
+          <button class="btn ghost small" id="changeUserBtn" type="button">Change user</button>
+          <button class="btn ghost small" id="refreshBtn" type="button">↻ Refresh now</button>
+        </div>
+        <div class="count-label">Total puzzles played — live</div>
+        <div class="bigcount" id="bigCount">0</div>
+        <p class="subcount" id="subCount">Connecting to Lichess…</p>
+      </div>
+      <div class="ringbox">
+        <div class="ringwrap">
+          <svg width="148" height="148" viewBox="0 0 148 148"><circle cx="74" cy="74" r="64" fill="none" stroke="var(--line)" stroke-width="11"/><circle id="ringFg" cx="74" cy="74" r="64" fill="none" stroke="var(--gold)" stroke-width="11" stroke-linecap="round" stroke-dasharray="402" stroke-dashoffset="402"/></svg>
+          <div class="ring-c"><div><b id="ringNum">–</b><span>today</span></div></div>
+        </div>
+        <p id="ringText">Daily goal ring fills as today's puzzles are counted.</p>
+        <label class="goalrow">Daily goal <input type="number" id="goalInput" min="1" max="500" value="10"> puzzles</label>
+      </div>
+    </div>
+    <div class="levelbar">
+      <div class="leveltop"><span id="levelName"><b>Level —</b></span><span id="levelNext">—</span></div>
+      <div class="bar"><i id="levelFill"></i></div>
+    </div>
+  </section>
+
+  <!-- TILES -->
+  <div class="tiles" id="tiles">
+    <div class="tile"><div class="k">Puzzle rating <span id="progBadge"></span></div><div class="v" id="tRating">—</div><div class="s" id="tRatingSub">Your current Lichess puzzle Elo.</div></div>
+    <div class="tile"><div class="k">Rating confidence</div><div class="v" id="tRD">—</div><div class="s">Lower deviation (±) = Lichess is more sure of your rating. Below ±60 is solid.</div></div>
+    <div class="tile"><div class="k">Solved today <span class="flame" id="flameIc"></span></div><div class="v" id="tToday">—</div><div class="s" id="tTodaySub">Needs the free token below for exact today / streak data — or it estimates from total changes while this page is open.</div></div>
+    <div class="tile"><div class="k">Next milestone</div><div class="v" id="tMile">—</div><div class="s" id="tMileSub">The next round number you're chasing.</div></div>
+  </div>
+
+  <!-- GAMES ARENA -->
+  <section class="arena" id="gamesSection">
+    <div class="sec-head">
+      <div><h3>Games arena</h3><p>Not just puzzles — your real Lichess games too. Ratings for every speed you've played, your win / loss record, peaks, best wins and your most recent battle days. All public, no token needed, refreshed with the same live check.</p></div>
+      <a class="btn ghost small" href="https://lichess.org/?any#hook" target="_blank" rel="noopener" style="text-decoration:none">Play a game on Lichess →</a>
+    </div>
+    <div class="arena-grid">
+      <div class="panel">
+        <h3>Ratings by speed</h3>
+        <p class="desc">Current rating, games played and recent movement per time control. The bar compares speeds against your highest rating.</p>
+        <div id="speedRows"><p class="desc" style="margin-top:12px">Loading your game ratings…</p></div>
+      </div>
+      <div class="panel">
+        <h3>Game record — all modes</h3>
+        <p class="desc">Every rated and casual game on the account, from Lichess's own counters.</p>
+        <div class="wld" id="wldBar" aria-hidden="true"></div>
+        <div class="wld-legend" id="wldLegend"></div>
+        <div id="recordKv" style="margin-top:8px"></div>
+      </div>
+    </div>
+    <div class="perfdetails" id="perfDetails"></div>
+    <div class="panel" style="margin-top:12px">
+      <h3>Recent battle days</h3>
+      <p class="desc">Your latest active days from Lichess's activity feed — games by speed with the rating you started and ended the day on, plus puzzles and Streak runs that day.</p>
+      <div id="activityList"><p class="desc" style="margin-top:10px">Loading your recent days…</p></div>
+    </div>
+  </section>
+
+  <!-- PUZZLE MODES: STORM / STREAK / RACER -->
+  <section class="arena" id="modesSection">
+    <div class="sec-head">
+      <div><h3>Puzzle modes</h3><p>The timed and survival puzzle modes, tracked alongside your normal puzzles — best scores, total runs and your recent Streak days. Public data, no token needed.</p></div>
+    </div>
+    <div class="modes">
+      <div class="panel modecard">
+        <div class="mk">Puzzle Storm · 3 minutes, mistakes cost time</div>
+        <div class="mv" id="stormBest">—</div>
+        <p class="ms" id="stormSub">Best Storm score</p>
+        <div id="stormHighs"></div>
+        <div id="stormDays"></div>
+        <a class="btn small cta" href="https://lichess.org/storm" target="_blank" rel="noopener">Run a Storm →</a>
+      </div>
+      <div class="panel modecard">
+        <div class="mk">Puzzle Streak · one mistake ends the run</div>
+        <div class="mv" id="streakBest">—</div>
+        <p class="ms" id="streakSub">Longest streak of puzzles solved in a single run</p>
+        <div id="streakKv"></div>
+        <div id="streakDays"></div>
+        <a class="btn small cta" href="https://lichess.org/streak" target="_blank" rel="noopener">Start a Streak →</a>
+      </div>
+      <div class="panel modecard">
+        <div class="mk">Puzzle Racer · race the clock &amp; rivals</div>
+        <div class="mv" id="racerBest">—</div>
+        <p class="ms" id="racerSub">Best Racer score</p>
+        <div id="racerKv"></div>
+        <a class="btn small cta" href="https://lichess.org/racer" target="_blank" rel="noopener">Join a Race →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- CHART + ACHIEVEMENTS -->
+  <div class="grid2" id="grid2">
+    <div class="panel">
+      <h3>Your rating journey</h3>
+      <p class="desc">Every recorded puzzle-rating point from Lichess, oldest to today. Peaks, dips and the comeback — all real.</p>
+      <div class="chartbox" id="chartBox"><p class="desc">Loading history…</p></div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:13px;color:var(--muted)">
+        <span>Peak <b class="mono" id="statPeak" style="color:var(--ink)">—</b></span>
+        <span>Start <b class="mono" id="statStart" style="color:var(--ink)">—</b></span>
+        <span>Change <b class="mono" id="statDelta" style="color:var(--ink)">—</b></span>
+        <span>Account age <b class="mono" id="statAge" style="color:var(--ink)">—</b></span>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>Trophy shelf</h3>
+      <p class="desc">Badges unlock automatically from your real totals. Grey ones are your next targets.</p>
+      <div class="badges" id="badges"></div>
+    </div>
+  </div>
+
+  <!-- DEEP STATS -->
+  <div class="grid2" id="deepGrid">
+    <div class="panel">
+      <h3>Theme strengths</h3>
+      <p class="desc" id="themeDesc">Connect the token below to see win rate by puzzle theme — forks, pins, mates, endgames and more, from your last 30 days on Lichess.</p>
+      <div id="themeList"></div>
+      <div id="perfSummary" style="margin-top:14px"></div>
+    </div>
+    <div class="panel">
+      <h3>Recent attempts</h3>
+      <p class="desc" id="attemptDesc">Your latest puzzle attempts — wins, losses, ratings and themes — appear here with the token connected.</p>
+      <ul class="attempts" id="attemptList"></ul>
+    </div>
+  </div>
+
+  <!-- TOKEN -->
+  <section class="tokenbox" id="tokenBox">
+    <h3>🔓 Unlock the deep stats — free, 1 minute, step by step</h3>
+    <p class="locked-note">The live counter above needs no login. But <b>today's exact count, win rate, win streaks, theme strengths and recent attempts</b> are private on Lichess — they need a read-only token from your own account:</p>
+    <p class="locked-note" style="margin-top:8px"><b>Games, Storm, Streak and Racer need no token and no extra box</b> — they're public and already live above. So when Lichess shows the scope list, tick <b>only</b> <code>puzzle:read</code>: no other box adds anything to this tracker, the rest would only give the token powers it doesn't need (playing moves, sending challenges, messages).</p>
+    <ol>
+      <li>Open <a href="https://lichess.org/account/oauth/token" target="_blank" rel="noopener">lichess.org/account/oauth/token</a> and sign in if asked.</li>
+      <li>Write any description, e.g. <code>Puzzle Tracker</code>.</li>
+      <li>Tick <b>only</b> the scope <code>Read puzzle activity</code> (<code>puzzle:read</code>). Nothing else.</li>
+      <li>Tap <b>Generate</b>, copy the token (starts with <code>lip_</code>) and paste it here. It can only <i>read</i> puzzle activity — it cannot play, chat or change your account, and you can delete it anytime on that same page.</li>
+    </ol>
+    <form class="tokenrow" id="tokenForm">
+      <input type="password" id="tokenInput" placeholder="Paste token — lip_…" autocomplete="off" aria-label="Lichess API token">
+      <button class="btn" type="submit" id="tokenBtn">Unlock deep stats</button>
+    </form>
+    <p class="hint"><b>Enter it once — this browser remembers it.</b> After a successful unlock, the token is saved in this browser on this phone (local storage) and reconnected automatically every time you open this page's website link again — no Muse sign-in, no re-pasting. It is only ever sent to lichess.org, never to any other server, and Disconnect below forgets it instantly. Pasting is cleaned up automatically (stray spaces or line breaks are removed), and Lichess itself confirms the token before anything loads.</p>
+    <p class="hint" style="margin-top:8px"><b>For your dad's phone:</b> send him this page's website link — he opens it in Chrome or Safari (not inside another app), pastes the same token once, and his phone remembers it the same way. Each phone keeps its own saved copy, so he never needs Muse and never has to paste it again. Tip: opening the link inside Facebook/Messenger's built-in browser can forget saved data — open it in the real Chrome/Safari browser for it to stick. If you ever clear that browser's site data, just paste the token once more. You can revoke the token anytime at lichess.org/account/oauth/token.</p>
+    <div class="err" id="tokenError"></div>
+    <div class="tokstat hidden" id="tokenStatus" role="status"></div>
+    <div style="margin-top:10px"><button class="btn ghost small hidden" id="tokenDisconnect" type="button">Disconnect token</button> <button class="btn ghost small hidden" id="deepRetry" type="button">Retry deep stats</button></div>
+    <div id="deepStats" class="hidden" style="margin-top:16px">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:9px" id="deepTiles"></div>
+    </div>
+  </section>
+
+  <!-- DAILY PUZZLE -->
+  <section class="daily" id="dailyCard">
+    <div style="padding:14px;display:grid;place-items:center;background:var(--panel2)"><div style="width:100%;max-width:340px"><div class="board" id="board" aria-label="Daily puzzle chessboard"></div><p id="boardCaption" style="margin:9px 0 0;font-size:12px;color:var(--faint);text-align:center">Loading today's real puzzle position…</p></div></div>
+    <div class="daily-info">
+      <p style="margin:0;font-size:11.5px;letter-spacing:.14em;font-weight:700;color:var(--faint)">LICHESS PUZZLE OF THE DAY</p>
+      <h3 id="dailyTitle" style="margin-top:8px">Loading today's puzzle…</h3>
+      <p class="desc" id="dailyDesc" style="color:var(--muted);font-size:14.5px;line-height:1.55">One fresh official puzzle every day. Solving it on Lichess counts toward your total above.</p>
+      <div class="chips" id="dailyChips"></div>
+      <div style="margin-top:16px;display:flex;gap:9px;flex-wrap:wrap">
+        <a class="btn" id="dailyLink" href="https://lichess.org/training/daily" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">Solve it on Lichess →</a>
+        <a class="btn ghost" href="https://lichess.org/training" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">Open Puzzle Storm / training</a>
+      </div>
+    </div>
+  </section>
+
+  <p class="foot">Data comes live from the official Lichess API — <a href="https://lichess.org/api" target="_blank" rel="noopener">lichess.org/api</a> · Public stats: <span class="mono">/api/user</span> &amp; rating history · Games &amp; modes (public): <span class="mono">/api/user/{user}/perf</span>, <span class="mono">/api/user/{user}/activity</span> &amp; <span class="mono">/api/storm/dashboard</span> · Private deep stats (with your token): <span class="mono">/api/puzzle/activity</span> &amp; <span class="mono">/api/puzzle/dashboard</span> · Auto-refresh every 20s (Lichess has no push feed, so ~20s is true real-time here) · Bismillah — one puzzle at a time.</p>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+  var $ = function(id){ return document.getElementById(id); };
+  var state = { user:null, profile:null, total:0, prevTotal:null, sessionStartTotal:null, sessionSolved:0, token:null, tokenUser:null, remembered:false, deepBusy:false, deepLoaded:false, profileBusy:false, profilePromise:null, actLoaded:false, perfLoaded:false, stormLoaded:false, lastDeep:0, deepRetryTimer:null, deepRetries:0, activity:[], todayExact:null, timer:null, countdown:20, lastFetch:null, prevGames:null, storm:null };
+
+  /* Remember-me storage: the token (and username/goal) live in THIS browser's
+     local storage on THIS device only, so the public website link can be opened
+     by anyone (e.g. family) with no Muse account — paste once per phone/browser,
+     then it reconnects by itself. Nothing is baked into the page or sent anywhere
+     except lichess.org. Wrapped in try/catch: in-app/private browsers may block it. */
+  var LS = { token:"lpt_token_v1", user:"lpt_user_v1", goal:"lpt_goal_v1" };
+  function lsGet(k){ try{ return window.localStorage.getItem(k); }catch(e){ return null; } }
+  function lsSet(k,v){ try{ window.localStorage.setItem(k,v); return window.localStorage.getItem(k)===v; }catch(e){ return false; } }
+  function lsDel(k){ try{ window.localStorage.removeItem(k); }catch(e){} }
+
+  var LEVELS = [
+    [0,"Pawn Walker"],[10,"Knight's First Leap"],[50,"Bishop's Apprentice"],[100,"Rook Solid"],
+    [250,"Tactician"],[500,"Combination Hunter"],[1000,"Puzzle Adept"],[2000,"Calculation Machine"],
+    [3500,"Puzzle Master"],[5000,"Grand Tactician"],[7500,"Puzzle Grandmaster"],[10000,"Legend of the Board"],
+    [15000,"Mythic Solver"],[25000,"Eternal Grandmaster"]
+  ];
+  var BADGES = [
+    [1,"♟","First Steps","Solve 1 puzzle"],[25,"♞","Warm-Up Done","25 puzzles"],[100,"♝","Century","100 puzzles"],
+    [250,"♜","Quarter Force","250 puzzles"],[500,"⚔","Half-Thousand","500 puzzles"],[1000,"👑","Four Figures","1,000 puzzles"],
+    [2500,"🔥","On Fire","2,500 puzzles"],[5000,"💎","Puzzle Royalty","5,000 puzzles"],[10000,"🏆","Five Digits","10,000 puzzles"]
+  ];
+
+  /* Verified live from https://lichess.org/api/user/aminchess4 and /api/storm/dashboard/aminchess4
+     on 6 Nov 2026, 21:55 MYT. Shown instantly on open, then replaced by a fresh live fetch within seconds.
+     Storm dashboard returned all-zero highs and no days — aminchess4 has not run a Storm yet. */
+  var SNAPSHOT = {"id":"aminchess4","username":"aminchess4","perfs":{"bullet":{"games":76,"rating":1317,"rd":58,"prog":31},"blitz":{"games":107,"rating":1177,"rd":69,"prog":17},"rapid":{"games":95,"rating":1334,"rd":89,"prog":-40},"racingKings":{"games":1,"rating":1258,"rd":409,"prog":0,"prov":true},"puzzle":{"games":274,"rating":1271,"rd":79,"prog":0},"racer":{"runs":3,"score":19},"streak":{"runs":4,"score":8}},"createdAt":1755266536740,"playTime":{"total":75914,"tv":0},"count":{"all":286,"rated":279,"draw":7,"loss":147,"win":132}};
+  var SNAPSHOT_LABEL = "6 Nov 2026 · 21:55 MYT";
+
+  function fmt(n){ return (n==null||isNaN(n)) ? "—" : Number(n).toLocaleString("en-US"); }
+  function toast(msg, ms){ var t=$("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(function(){ t.classList.remove("show"); }, ms||3200); }
+  function timeAgo(ts){ var s=Math.max(0,Math.round((Date.now()-ts)/1000)); if(s<8) return "just now"; if(s<60) return s+"s ago"; var m=Math.round(s/60); return m+" min ago"; }
+
+  /* ---------- DAILY PUZZLE BOARD ---------- */
+  var GLYPH = {k:"♚",q:"♛",r:"♜",b:"♝",n:"♞",p:"♟",K:"♔",Q:"♕",R:"♖",B:"♗",N:"♘",P:"♙"};
+  function renderBoard(fen){
+    var board=$("board"); board.innerHTML="";
+    var placement=(fen||"").split(" ")[0]; var rows=placement.split("/");
+    for(var r=0;r<8;r++){
+      var row=rows[r]||"8", f=0;
+      for(var i=0;i<row.length;i++){
+        var ch=row[i];
+        if(/\d/.test(ch)){ for(var e=0;e<parseInt(ch,10);e++){ board.appendChild(sq(r,f,"")); f++; } }
+        else { board.appendChild(sq(r,f,ch)); f++; }
+      }
+      while(f<8){ board.appendChild(sq(r,f,"")); f++; }
+    }
+    function sq(r,f,piece){
+      var d=document.createElement("div"); d.className="sq "+(((r+f)%2===0)?"l":"d");
+      if(piece){ var s=document.createElement("span"); s.className=(piece===piece.toUpperCase())?"wk":"bk"; s.textContent=GLYPH[piece]||""; d.appendChild(s); }
+      return d;
+    }
+  }
+  function loadDaily(){
+    lichessFetch("https://lichess.org/api/puzzle/daily",{headers:{"Accept":"application/json"}},2)
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(!d||!d.puzzle) return;
+        var fen = d.puzzle.fen || (d.game && d.game.fen) || "";
+        // puzzle.fen may be the position before the key move setup; fall back to game fen
+        renderBoard(fen || "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+        $("dailyTitle").textContent = "Puzzle #"+d.puzzle.id+" · Rated "+fmt(d.puzzle.rating);
+        $("dailyDesc").textContent = "From a real game ("+((d.game&&d.game.players&&d.game.players[0]?d.game.players[0].name:"")||"")+" vs "+((d.game&&d.game.players&&d.game.players[1]?d.game.players[1].name:"")||"")+"). "+fmt(d.puzzle.plays)+" solvers have tried it. Find the best move!";
+        var chips = ["Themes: "+(d.puzzle.themes||[]).join(", ")||"—","Rating "+fmt(d.puzzle.rating),"Played "+fmt(d.puzzle.plays)+"×"];
+        $("dailyChips").innerHTML = chips.map(function(c){ return '<span class="chip">'+c+'</span>'; }).join("");
+        $("dailyLink").href = "https://lichess.org/training/"+d.puzzle.id;
+        var cap=$("boardCaption"); if(cap) cap.textContent="Today's real position, from the game above — find the best move.";
+      })
+      .catch(function(){ $("dailyTitle").textContent="Today's puzzle — open it on Lichess"; renderBoard("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"); var cap=$("boardCaption"); if(cap) cap.textContent="Board shown is a generic illustration — tap “Solve it on Lichess” for today's real puzzle position."; });
+  }
+
+  /* ---------- PROFILE / LIVE COUNTER ---------- */
+  function levelFor(total){
+    var cur=LEVELS[0], next=null;
+    for(var i=0;i<LEVELS.length;i++){ if(total>=LEVELS[i][0]){ cur=LEVELS[i]; next=LEVELS[i+1]||null; } }
+    return {cur:cur, next:next};
+  }
+  function nextMilestone(total){
+    var steps=[10,25,50,100,250,500,750,1000,1500,2000,2500,3000,4000,5000,7500,10000,12500,15000,20000,25000,50000];
+    for(var i=0;i<steps.length;i++){ if(total<steps[i]) return steps[i]; }
+    return Math.ceil((total+1)/10000)*10000;
+  }
+  function renderBadges(total){
+    $("badges").innerHTML = BADGES.map(function(b){
+      var got = total>=b[0];
+      return '<div class="badge'+(got?" got":"")+'"><div class="ic">'+b[1]+'</div><b>'+b[2]+(got?" ✓":"")+'</b><span>'+b[3]+'</span></div>';
+    }).join("");
+  }
+  function animateCount(from,to){
+    var el=$("bigCount"); var start=performance.now(), dur=700;
+    function step(t){ var p=Math.min(1,(t-start)/dur); var v=Math.round(from+(to-from)*(1-Math.pow(1-p,3))); el.textContent=fmt(v); if(p<1) requestAnimationFrame(step); }
+    requestAnimationFrame(step);
+  }
+  function applyProfile(data, isFirst){
+    if(data!==SNAPSHOT) state.snapshotShown=false;
+    var pz = (data.perfs && data.perfs.puzzle) || {};
+    var total = pz.games||0;
+    var gained = (state.prevTotal!=null) ? total-state.prevTotal : 0;
+    if(isFirst){ state.sessionStartTotal=total; }
+    if(gained>0){
+      state.sessionSolved += gained;
+      $("bigCount").classList.remove("bump"); void $("bigCount").offsetWidth; $("bigCount").classList.add("bump");
+      toast("🎉 +"+gained+" puzzle"+(gained>1?"s":"")+" solved — counter updated live! Total: "+fmt(total));
+    }
+    animateCount(state.prevTotal!=null?state.prevTotal:Math.max(0,total-0), total);
+    state.prevTotal=total; state.total=total; state.profile=data; state.lastFetch=Date.now();
+    /* A fresh answer from Lichess restarts the auto-check clock, so the
+       "checked … ago" line and the countdown always describe the fetch
+       that actually landed — not when a (possibly queued) request began. */
+    state.countdown=20;
+
+    $("avatarLetter").textContent=(data.username||"?").charAt(0).toUpperCase();
+    $("whoName").textContent=(data.title?data.title+" ":"")+data.username;
+    var created = data.createdAt ? new Date(data.createdAt) : null;
+    $("whoMeta").innerHTML="On Lichess since "+(created?created.toLocaleDateString("en-GB",{month:"short",year:"numeric"}):"—")+" · "+(data.count&&data.count.all?fmt(data.count.all)+" games all modes":"")+" · <a href=\"https://lichess.org/@/"+data.username+"\" target=\"_blank\" rel=\"noopener\">View profile ↗</a>";
+    var playH = data.playTime&&data.playTime.total ? Math.round(data.playTime.total/3600) : null;
+    $("subCount").innerHTML="<strong>"+fmt(total)+"</strong> puzzles and counting"+(playH?" · <strong>"+fmt(playH)+"h</strong> total time on Lichess":"")+" · Last checked <span id='chkAgo'>just now</span> · Next auto-check in <strong id='cd'>20</strong>s";
+
+    // rating tile
+    $("tRating").textContent = pz.rating?fmt(pz.rating):"—";
+    if(pz.prog!=null && pz.prog!==0){ $("progBadge").innerHTML = pz.prog>0?'<span class="up">▲ '+pz.prog+'</span>':'<span class="down">▼ '+Math.abs(pz.prog)+'</span>'; $("tRatingSub").textContent = pz.prog>0 ? "Climbing — up "+pz.prog+" over your recent puzzles. Keep the streak warm." : "Down "+Math.abs(pz.prog)+" recently — the next puzzle is the comeback."; }
+    else { $("progBadge").innerHTML=""; }
+    $("tRD").textContent = pz.rd!=null ? "±"+pz.rd : "—";
+
+    // today: exact (token) else session-based
+    var todayVal = (state.todayExact!=null) ? state.todayExact : state.sessionSolved;
+    $("tToday").textContent = fmt(todayVal);
+    $("flameIc").textContent = todayVal>0 ? "🔥" : "";
+    if(state.todayExact==null){ $("tTodaySub").textContent="Solved since you opened this page: "+fmt(state.sessionSolved)+". Connect the token below for the full calendar-day total + streaks."; }
+    var goal = Math.max(1, parseInt($("goalInput").value,10)||10);
+    var pct = Math.min(100, Math.round(todayVal/goal*100));
+    $("ringFg").style.strokeDashoffset = String(402 - 402*pct/100);
+    $("ringNum").textContent = todayVal+" / "+goal;
+    $("ringText").textContent = todayVal>=goal ? "Goal smashed today. Anything more is pure bonus — champion behaviour." : (goal-todayVal)+" more to hit today's goal of "+goal+". One sitting can do it.";
+
+    // level
+    var lv=levelFor(total);
+    $("levelName").innerHTML="<b>Level: "+lv.cur[1]+"</b> · "+fmt(total)+" XP (1 puzzle = 1 XP)";
+    if(lv.next){ var span=lv.next[0]-lv.cur[0], done=total-lv.cur[0]; $("levelNext").textContent=fmt(lv.next[0]-total)+" puzzles to “"+lv.next[1]+"”"; $("levelFill").style.width=(span?Math.round(done/span*100):100)+"%"; }
+    else { $("levelNext").textContent="Max level reached. Unreal."; $("levelFill").style.width="100%"; }
+
+    // milestone
+    var ms=nextMilestone(total);
+    $("tMile").textContent=fmt(ms);
+    $("tMileSub").textContent="Only "+fmt(ms-total)+" away. At 10/day that's about "+Math.max(1,Math.ceil((ms-total)/10))+" day"+((ms-total)>10?"s":"")+".";
+    renderBadges(total);
+    renderGames(data);
+    updateLivePill();
+  }
+  function updateLivePill(){
+    $("liveDot").classList.add("on");
+    $("liveText").textContent = state.user ? ("Live · @"+state.user+" · checked "+(state.lastFetch?timeAgo(state.lastFetch):"—")) : "Not connected yet";
+  }
+  /* Returns a promise for true (Lichess answered, data applied) or false.
+     A call that arrives while a fetch is already in flight joins that
+     same promise instead of being silently dropped — that drop is why
+     Refresh used to toast "Refreshed ✓" while the "checked … ago" timer
+     kept climbing: no new fetch ever ran and lastFetch never moved. */
+  function fetchProfile(silent){
+    if(!state.user) return Promise.resolve(false);
+    if(state.profileBusy && state.profilePromise) return state.profilePromise;
+    state.profileBusy=true;
+    state.profilePromise = lichessFetch("https://lichess.org/api/user/"+encodeURIComponent(state.user),{headers:{"Accept":"application/json"}},2)
+      .then(function(r){ if(r.status===404) throw new Error("notfound"); if(!r.ok) throw new Error("http"+r.status); return r.json(); })
+      .then(function(d){ applyProfile(d, state.prevTotal==null); /* Deep stats are heavy (dashboard + 220-attempt stream): reloading them on every 20s poll wasted Lichess rate limit and made fresh unlocks collide with a poll reload — now at most once per 2 minutes once they have loaded, never while an auto-retry is pending, and promptly while they have never loaded. */
+        if(state.token && !state.deepBusy && !state.deepRetryTimer && (!state.deepLoaded || Date.now()-(state.lastDeep||0)>120000)) loadDeep(false);
+        return true; })
+      .catch(function(e){
+        if(!silent){ showUserError(e.message==="notfound" ? "That username wasn't found on Lichess. Check the spelling — it must match your lichess.org name exactly." : "Couldn't reach Lichess just now. Check your connection and tap Refresh."); }
+        return false;
+      })
+      .then(function(ok){ state.profileBusy=false; state.profilePromise=null; return ok; });
+    return state.profilePromise;
+  }
+  function fetchHistory(){
+    lichessFetch("https://lichess.org/api/user/"+encodeURIComponent(state.user)+"/rating-history",{headers:{"Accept":"application/json"}},2)
+      .then(function(r){ if(!r.ok) throw new Error("http"+r.status); return r.json(); })
+      .then(function(arr){
+        var pz=null; for(var i=0;i<arr.length;i++){ if(arr[i].name==="Puzzle") pz=arr[i]; }
+        if(!pz||!pz.points||!pz.points.length){ $("chartBox").innerHTML='<p class="desc">Lichess has not published rating-history points for this account yet — it records them over time, and this chart draws itself automatically once the first points land. Your live rating above is always current.</p>'; return; }
+        drawChart(pz.points);
+        var vals=pz.points.map(function(p){return p[3];});
+        var peak=Math.max.apply(null,vals), start=vals[0], last=vals[vals.length-1];
+        $("statPeak").textContent=fmt(peak); $("statStart").textContent=fmt(start);
+        var d=last-start; $("statDelta").textContent=(d>=0?"+":"")+fmt(d); $("statDelta").style.color=d>=0?"var(--green)":"var(--red)";
+      }).catch(function(){ $("chartBox").innerHTML='<p class="desc">Rating history could not load just now — retrying automatically in a few seconds.</p>'; retryLater("history", fetchHistory, 20000); });
+  }
+  function drawChart(points){
+    var W=640,H=210,padL=44,padR=10,padT=12,padB=24;
+    var vals=points.map(function(p){return p[3];});
+    var min=Math.min.apply(null,vals), max=Math.max.apply(null,vals);
+    var span=(max-min)||1; min-=span*0.12; max+=span*0.12; span=max-min;
+    function X(i){ return padL + (W-padL-padR)*(points.length===1?0.5:i/(points.length-1)); }
+    function Y(v){ return padT + (H-padT-padB)*(1-(v-min)/span); }
+    var path=points.map(function(p,i){ return (i===0?"M":"L")+X(i).toFixed(1)+","+Y(p[3]).toFixed(1); }).join(" ");
+    var area=path+" L"+X(points.length-1).toFixed(1)+","+(H-padB)+" L"+padL+","+(H-padB)+" Z";
+    var grid=""; for(var g=0;g<4;g++){ var v=min+span*g/3, y=Y(v); grid+='<line x1="'+padL+'" y1="'+y+'" x2="'+(W-padR)+'" y2="'+y+'" stroke="var(--line)" stroke-width="1"/><text class="axis" x="'+(padL-6)+'" y="'+(y+3)+'" text-anchor="end">'+Math.round(v)+'</text>'; }
+    var first=points[0], lastp=points[points.length-1];
+    function ds(p){ return new Date(p[0],p[1],p[2]).toLocaleDateString("en-GB",{month:"short",year:"2-digit"}); }
+    $("chartBox").innerHTML='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Puzzle rating history chart">'+grid+'<path d="'+area+'" fill="var(--gold)" opacity="0.14"/><path d="'+path+'" fill="none" stroke="var(--gold)" stroke-width="2.5" stroke-linejoin="round"/><circle cx="'+X(points.length-1)+'" cy="'+Y(lastp[3])+'" r="4.5" fill="var(--gold)"/><text class="axis" x="'+padL+'" y="'+(H-6)+'">'+ds(first)+'</text><text class="axis" x="'+(W-padR)+'" y="'+(H-6)+'" text-anchor="end">'+ds(lastp)+' · '+fmt(lastp[3])+'</text></svg>';
+  }
+
+  /* ---------- GAMES + STORM / STREAK / RACER (all public, no token) ---------- */
+  var SPEEDS = [
+    ["ultraBullet","UltraBullet","¼ min"],["bullet","Bullet","1 min"],["blitz","Blitz","3–5 min"],["rapid","Rapid","10–25 min"],
+    ["classical","Classical","30+ min"],["correspondence","Correspondence","days"],["chess960","Chess960",""],["racingKings","Racing Kings",""],
+    ["kingOfTheHill","King of the Hill",""],["threeCheck","Three-check",""],["antichess","Antichess",""],["atomic","Atomic",""],["horde","Horde",""],["crazyhouse","Crazyhouse",""]
+  ];
+  var SPEEDNAME = {}; SPEEDS.forEach(function(s){ SPEEDNAME[s[0]]=s[1]; });
+  function progHtml(p){ if(p==null||p===0) return ""; return p>0 ? ' <span class="up">▲ '+p+'</span>' : ' <span class="down">▼ '+Math.abs(p)+'</span>'; }
+  function renderGames(data){
+    var perfs = data.perfs||{};
+    // bump toast when a finished game lands while page is open
+    var gamesAll = (data.count && data.count.all!=null) ? data.count.all : null;
+    if(gamesAll!=null){
+      if(state.prevGames!=null && gamesAll>state.prevGames){ toast("♟ Game finished — your record just updated live. Total games: "+fmt(gamesAll)); }
+      state.prevGames = gamesAll;
+    }
+    // ratings by speed
+    var shown = SPEEDS.filter(function(s){ var p=perfs[s[0]]; return p && (p.games>0 || s[0]==="bullet" || s[0]==="blitz" || s[0]==="rapid"); });
+    var maxR = 0; shown.forEach(function(s){ if(perfs[s[0]].rating>maxR) maxR=perfs[s[0]].rating; });
+    $("speedRows").innerHTML = shown.map(function(s){
+      var p=perfs[s[0]];
+      var pct = maxR ? Math.max(6, Math.round(p.rating/maxR*100)) : 0;
+      return '<div class="speedrow"><div class="nm"><b>'+s[1]+'</b><span>'+(s[2]||"variant")+'</span></div>'+
+        '<div class="rt">'+(p.rating?fmt(p.rating):"—")+(p.prov?' <span style="font-size:13px;color:var(--faint)">prov.</span>':"")+'</div>'+
+        '<div class="rtrack"><i style="width:'+pct+'%"></i></div>'+
+        '<div class="meta"><b>'+fmt(p.games||0)+'</b> games'+progHtml(p.prog)+'<br>±'+(p.rd!=null?p.rd:"—")+' deviation</div></div>';
+    }).join("") || '<p class="desc" style="margin-top:12px">No games on this account yet.</p>';
+    // record
+    var c = data.count||{}; var w=c.win||0, l=c.loss||0, dr=c.draw||0, all=c.all||(w+l+dr);
+    var pw = all?Math.round(w/all*1000)/10:0, pl = all?Math.round(l/all*1000)/10:0, pd = Math.max(0, Math.round((100-pw-pl)*10)/10);
+    $("wldBar").innerHTML = all ? '<i class="w" style="width:'+pw+'%"></i><i class="d" style="width:'+pd+'%"></i><i class="l" style="width:'+pl+'%"></i>' : "";
+    $("wldLegend").innerHTML = '<span>Wins <b>'+fmt(w)+'</b></span><span>Draws <b>'+fmt(dr)+'</b></span><span>Losses <b>'+fmt(l)+'</b></span><span>Total <b>'+fmt(all)+'</b></span>';
+    var played = SPEEDS.map(function(s){ return [s[1], perfs[s[0]]]; }).filter(function(x){ return x[1] && x[1].games>0; });
+    var bestSpeed="—", mostPlayed="—";
+    if(played.length){
+      var bs=played.slice().sort(function(a,b){return b[1].rating-a[1].rating;})[0];
+      var mp=played.slice().sort(function(a,b){return b[1].games-a[1].games;})[0];
+      bestSpeed = bs[0]+" · "+fmt(bs[1].rating); mostPlayed = mp[0]+" · "+fmt(mp[1].games)+" games";
+    }
+    var hrs = data.playTime&&data.playTime.total ? Math.floor(data.playTime.total/3600) : 0;
+    var mins = data.playTime&&data.playTime.total ? Math.round((data.playTime.total%3600)/60) : 0;
+    $("recordKv").innerHTML =
+      '<div class="kv"><span>Win rate</span><b>'+(all?(Math.round(w/all*1000)/10)+"%":"—")+'</b></div>'+
+      '<div class="kv"><span>Rated games</span><b>'+fmt(c.rated||0)+'</b></div>'+
+      '<div class="kv"><span>Highest-rated speed</span><b>'+bestSpeed+'</b></div>'+
+      '<div class="kv"><span>Most played speed</span><b>'+mostPlayed+'</b></div>'+
+      '<div class="kv"><span>Total time on Lichess</span><b>'+(data.playTime?hrs+"h "+mins+"m":"—")+'</b></div>';
+    // modes from perfs: streak + racer (+ storm when present)
+    var st = perfs.streak;
+    if(st){ $("streakBest").textContent = fmt(st.score); $("streakKv").innerHTML = '<div class="kv"><span>Total Streak runs</span><b>'+fmt(st.runs)+'</b></div><div class="kv"><span>Best run</span><b>'+fmt(st.score)+' in a row</b></div>'; }
+    else { $("streakBest").textContent = "0"; $("streakKv").innerHTML = '<p class="ms">No Streak runs yet — one mistake ends the run, how far can you get?</p>'; }
+    var rc = perfs.racer;
+    if(rc){ $("racerBest").textContent = fmt(rc.score); $("racerKv").innerHTML = '<div class="kv"><span>Total Races</span><b>'+fmt(rc.runs)+'</b></div><div class="kv"><span>Best score</span><b>'+fmt(rc.score)+'</b></div>'; }
+    else { $("racerBest").textContent = "0"; $("racerKv").innerHTML = '<p class="ms">No Races yet — solve fast, finish ahead of the pack.</p>'; }
+    if(perfs.storm){ renderStormSummary(perfs.storm.runs, perfs.storm.score); }
+  }
+  function renderStormSummary(runs, best){
+    $("stormBest").textContent = fmt(best||0);
+    $("stormSub").textContent = (runs>0) ? "Best Storm score · "+fmt(runs)+" run"+(runs===1?"":"s")+" played" : "Best Storm score";
+  }
+  function renderStorm(d){
+    if(!d) return;
+    state.storm = d;
+    var days = d.days||[]; var high = d.high||{};
+    var runs = days.reduce(function(a,x){ return a+(x.runs||0); },0);
+    var perfsStorm = state.profile && state.profile.perfs && state.profile.perfs.storm;
+    if(perfsStorm) runs = perfsStorm.runs;
+    renderStormSummary(runs, high.allTime!=null?high.allTime:(perfsStorm?perfsStorm.score:0));
+    $("stormHighs").innerHTML =
+      '<div class="kv"><span>Best today</span><b>'+fmt(high.day||0)+'</b></div>'+
+      '<div class="kv"><span>Best this week</span><b>'+fmt(high.week||0)+'</b></div>'+
+      '<div class="kv"><span>Best this month</span><b>'+fmt(high.month||0)+'</b></div>'+
+      '<div class="kv"><span>All-time best</span><b>'+fmt(high.allTime||0)+'</b></div>'+
+      '<div class="kv"><span>Total runs</span><b>'+fmt(runs)+'</b></div>';
+    if(!days.length){
+      $("stormDays").innerHTML = '<p class="ms" style="margin-top:10px">No Storm runs yet on this account. Your first 3-minute run starts this board — every run after that lands here automatically.</p>';
+      return;
+    }
+    $("stormDays").innerHTML = '<p class="ms" style="margin:12px 0 2px;font-weight:700;color:var(--ink)">Recent Storm days</p>' + days.slice(0,3).map(function(x){
+      var dt = x._id ? new Date(x._id) : null;
+      var when = dt && !isNaN(dt) ? dt.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}) : (x._id||"");
+      return '<div class="kv"><span>'+when+'</span><b>score '+fmt(x.score)+' · '+fmt(x.runs)+' run'+(x.runs===1?"":"s")+' · best combo '+fmt(x.combo)+'</b></div>';
+    }).join("");
+  }
+  function fetchStorm(){
+    if(!state.user) return;
+    lichessFetch("https://lichess.org/api/storm/dashboard/"+encodeURIComponent(state.user),{headers:{"Accept":"application/json"}},2)
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){ if(d){ state.stormLoaded=true; renderStorm(d); } else if(!state.stormLoaded){ retryLater("storm", fetchStorm, 20000); } })
+      .catch(function(){ if(!state.stormLoaded) retryLater("storm", fetchStorm, 20000); });
+  }
+  function fetchPerfDetails(){
+    if(!state.user) return;
+    var keys=[["bullet","Bullet"],["blitz","Blitz"],["rapid","Rapid"]];
+    /* Only draw the Loading placeholders before the first successful
+       load. Rebuilding them on every Refresh used to wipe good detail
+       panels and then strand them on "unavailable" if one request in
+       the burst failed (e.g. a 429) — now loaded panels stay put and
+       only get replaced by fresher data. */
+    if(!state.perfLoaded){
+      $("perfDetails").innerHTML = keys.map(function(k){
+        return '<div class="panel"><h3>'+k[1]+' detail</h3><p class="desc" id="perf-'+k[0]+'">Loading peak, best win and streaks…</p></div>';
+      }).join("");
+    }
+    keys.forEach(function(k){
+      lichessFetch("https://lichess.org/api/user/"+encodeURIComponent(state.user)+"/perf/"+k[0],{headers:{"Accept":"application/json"}},2)
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(d){
+          var el=$("perf-"+k[0]); if(!el) return;
+          if(!d || !d.stat){
+            if(!state.perfLoaded){ el.textContent="Detail for "+k[1]+" did not load just now — retrying automatically in a few seconds."; retryLater("perf", fetchPerfDetails, 15000); }
+            return;
+          }
+          state.perfLoaded=true;
+          var st=d.stat, cnt=st.count||{};
+          var peak = st.highest ? fmt(st.highest.int)+(st.highest.at?" · "+new Date(st.highest.at).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}):"") : "—";
+          var bw = (st.bestWins && st.bestWins.results && st.bestWins.results[0]) ? st.bestWins.results[0] : null;
+          var bwHtml = bw ? '<a href="https://lichess.org/'+bw.gameId+'" target="_blank" rel="noopener">'+bw.opId.name+'</a> ('+fmt(bw.opRating)+')' : "—";
+          var rs = st.resultStreak||{};
+          var curW = rs.win&&rs.win.cur?rs.win.cur.v:0, maxW = rs.win&&rs.win.max?rs.win.max.v:0;
+          el.innerHTML =
+            '<div class="kv"><span>Peak rating</span><b>'+peak+'</b></div>'+
+            '<div class="kv"><span>Best win vs</span><b>'+bwHtml+'</b></div>'+
+            '<div class="kv"><span>Record at this speed</span><b>'+fmt(cnt.win||0)+'W · '+fmt(cnt.draw||0)+'D · '+fmt(cnt.loss||0)+'L</b></div>'+
+            '<div class="kv"><span>Avg opponent</span><b>'+(cnt.opAvg?fmt(Math.round(cnt.opAvg)):"—")+'</b></div>'+
+            '<div class="kv"><span>Win streak</span><b>'+fmt(curW)+' now · best '+fmt(maxW)+'</b></div>'+
+            '<div class="kv"><span>World rank</span><b>'+(d.rank?"#"+fmt(d.rank):"unranked yet")+'</b></div>';
+        })
+        .catch(function(){ var el=$("perf-"+k[0]); if(el && !state.perfLoaded){ el.textContent="Detail for "+k[1]+" did not load just now — retrying automatically in a few seconds."; retryLater("perf", fetchPerfDetails, 15000); } });
+    });
+  }
+  function fetchActivityFeed(){
+    if(!state.user) return;
+    lichessFetch("https://lichess.org/api/user/"+encodeURIComponent(state.user)+"/activity",{headers:{"Accept":"application/json"}},2)
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(arr){
+        if(!arr){
+          /* Never leave "Loading your recent days…" up forever: say it
+             failed and retry on a timer. If days already loaded once,
+             they stay on screen untouched. */
+          if(!state.actLoaded){
+            $("activityList").innerHTML='<p class="desc" style="margin-top:10px">Recent days could not load just now — this page retries automatically in a few seconds. Your other stats are unaffected.</p>';
+            retryLater("activity", fetchActivityFeed, 15000);
+          }
+          return;
+        }
+        state.actLoaded=true;
+        var rows = arr.filter(function(x){ return x.games || x.puzzles || x.streak; }).slice(0,5);
+        $("activityList").innerHTML = rows.length ? rows.map(function(x){
+          var day = new Date(x.interval.start).toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"});
+          var chips=[];
+          if(x.games){ Object.keys(x.games).forEach(function(gk){ var g=x.games[gk]; var rp=(g.rp)?' · '+fmt(g.rp.before)+' → '+fmt(g.rp.after):''; chips.push('<span class="chip"><b>'+(SPEEDNAME[gk]||gk)+'</b>&nbsp;'+g.win+'W-'+g.loss+'L'+(g.draw?'-'+g.draw+'D':'')+rp+'</span>'); }); }
+          if(x.puzzles && x.puzzles.score){ chips.push('<span class="chip"><b>Puzzles</b>&nbsp;'+x.puzzles.score.win+'W-'+x.puzzles.score.loss+'L'+(x.puzzles.score.rp?' · '+fmt(x.puzzles.score.rp.before)+' → '+fmt(x.puzzles.score.rp.after):'')+'</span>'); }
+          if(x.streak){ chips.push('<span class="chip"><b>Streak</b>&nbsp;'+fmt(x.streak.runs)+' run'+(x.streak.runs===1?'':'s')+' · best '+fmt(x.streak.score)+'</span>'); }
+          return '<div class="actrow"><span class="day">'+day+'</span>'+chips.join("")+'</div>';
+        }).join("") : '<p class="desc" style="margin-top:10px">No game, puzzle or Streak activity recorded yet.</p>';
+        // streak recent days
+        var srows = arr.filter(function(x){ return x.streak; }).slice(0,3);
+        if(srows.length){
+          $("streakDays").innerHTML = '<p class="ms" style="margin:12px 0 2px;font-weight:700;color:var(--ink)">Recent Streak days</p>' + srows.map(function(x){
+            var day = new Date(x.interval.start).toLocaleDateString("en-GB",{day:"numeric",month:"short"});
+            return '<div class="kv"><span>'+day+'</span><b>'+fmt(x.streak.runs)+' run'+(x.streak.runs===1?'':'s')+' · best '+fmt(x.streak.score)+'</b></div>';
+          }).join("");
+        }
+      })
+      .catch(function(){
+        if(!state.actLoaded){
+          $("activityList").innerHTML='<p class="desc" style="margin-top:10px">Recent days could not load just now — this page retries automatically in a few seconds. Your other stats are unaffected.</p>';
+          retryLater("activity", fetchActivityFeed, 15000);
+        }
+      });
+  }
+
+  /* ---------- DEEP STATS (TOKEN) ---------- */
+  function authHeaders(){ return {"Accept":"application/json","Authorization":"Bearer "+state.token}; }
+  function sanitizeToken(raw){
+    var t=(raw||"").replace(/[\s\u200B\u200C\u200D\uFEFF]+/g,"");
+    t=t.replace(/^["']+|["']+$/g,"");
+    if(/^bearer/i.test(t)) t=t.slice(6);
+    return t;
+  }
+  function bodyError(txt,status){
+    try{ var j=JSON.parse(txt); if(j&&j.error) return String(j.error); }catch(e){}
+    return "HTTP "+status;
+  }
+  function tokenErr(kind,msg){ var e=new Error(msg); e.kind=kind; return e; }
+  /* Ask Lichess itself whether this token exists, so the user gets
+     Lichess's exact reason instead of a generic "cannot load" — the check
+     is GET /api/account (see testToken below); whether puzzle:read is
+     ticked is proven by the puzzle dashboard itself inside loadDeep. */
+  function waitMs(ms){ return new Promise(function(res){ setTimeout(res, ms); }); }
+  /* Transport layer for every Lichess request on this page.
+     Diagnosis (verified 6 Nov 2026): lichess.org itself loads fine in the
+     user's Chrome and Lichess's CORS answers are textbook (ACAO:* and a
+     preflight that allows Authorization — checked directly), yet this
+     page's cross-origin API calls from the public website link kept
+     failing in Chrome/Brave while the identical page worked inside the
+     Muse app. So the fault sits in the page's fetch path in that browser
+     context, not in Lichess and not in the user's network. The answer is
+     to stop depending on one request shape:
+       - attempts rotate between fetch() and XMLHttpRequest — different
+         browser code paths, so a context that breaks one often passes
+         the other;
+       - every attempt has a 12s timeout, so a request that stalls
+         (rather than failing fast) is aborted and retried instead of
+         hanging the load forever;
+       - requests are sent with credentials omitted, no referrer and
+         no-store caching — the plainest cross-origin shape there is.
+     On top of that, Lichess's own API docs (checked 6 Nov 2026) say:
+     "Only make one request at a time" and, on a 429, "waiting one minute
+     before retrying will be sufficient" — and an independent live test
+     found parallel calls answered with 429 {"error":"Please only run 1
+     request(s) at a time"}. This page originally fired its profile,
+     history, per-speed, activity, storm, token-check, dashboard and
+     puzzle-activity calls in parallel and retried failures immediately —
+     a textbook way to get rate-limited, after which every error was
+     collapsed into "Lichess could not be reached". So now EVERY Lichess
+     call on this page goes through one queue (lichessFetch below): one
+     request in flight at a time, ever. 5xx answers retry with short
+     backoff; a 401/403 is a real verdict and returns immediately. When
+     every transport fails, the thrown error names the actual failure so
+     the page can show it instead of guessing.
+     Second diagnosis (verified 6 Nov 2026 by calling the public API
+     directly — every endpoint for this account answers 200 in about a
+     second, no account or token needed): the endpoints are healthy, so
+     the remaining faults were in this page's own queue handling. A 429
+     used to wait a full 60 seconds INSIDE its queue slot, freezing
+     every section queued behind it on "Loading…" for minutes; a manual
+     Refresh that arrived while a profile fetch was in flight was
+     silently dropped yet still toasted "Refreshed ✓"; and the activity
+     feed swallowed failures, leaving "Loading your recent days…"
+     forever. Fixes: a 429 is now returned to its caller immediately
+     (the deep-stats loader already has its own patient retry schedule;
+     public sections schedule their own retry), Refresh reuses/awaits
+     the real fetch and only claims success when Lichess answered, and
+     every section surfaces a retrying state instead of hanging. */
+  function asResponse(res){
+    return { ok:res.ok, status:res.status,
+      text:function(){ return Promise.resolve(res.txt); },
+      json:function(){ return Promise.resolve(JSON.parse(res.txt)); } };
+  }
+  function rawFetch(url, opts){
+    return new Promise(function(resolve, reject){
+      var ctrl = ("AbortController" in window) ? new AbortController() : null;
+      var to = setTimeout(function(){ if(ctrl) ctrl.abort(); }, 12000);
+      var o = { method:(opts&&opts.method)||"GET", headers:(opts&&opts.headers)||{}, mode:"cors", credentials:"omit", cache:"no-store", referrerPolicy:"no-referrer" };
+      if(opts && opts.body!=null) o.body = opts.body;
+      if(ctrl) o.signal = ctrl.signal;
+      fetch(url, o).then(function(r){
+        return r.text().then(function(txt){ clearTimeout(to); resolve({ok:r.ok, status:r.status, txt:txt}); }, function(e){ clearTimeout(to); reject(e); });
+      }, function(e){ clearTimeout(to); reject(e); });
+    });
+  }
+  function rawXhr(url, opts){
+    return new Promise(function(resolve, reject){
+      var x = new XMLHttpRequest();
+      try{ x.open((opts&&opts.method)||"GET", url, true); }catch(e){ reject(e); return; }
+      x.timeout = 12000;
+      var h = (opts&&opts.headers)||{};
+      Object.keys(h).forEach(function(k){ try{ x.setRequestHeader(k, h[k]); }catch(e){} });
+      x.onload = function(){ resolve({ok:x.status>=200 && x.status<300, status:x.status, txt:x.responseText||""}); };
+      x.onerror = function(){ reject(new Error("XMLHttpRequest network error")); };
+      x.ontimeout = function(){ reject(new Error("XMLHttpRequest timed out")); };
+      x.onabort = function(){ reject(new Error("XMLHttpRequest aborted")); };
+      try{ x.send((opts&&opts.body)!=null ? opts.body : null); }catch(e){ reject(e); }
+    });
+  }
+  /* The one queue every Lichess call passes through: strictly one request
+     in flight at a time, in the order the page asked for them. */
+  var lichessQueue = Promise.resolve();
+  function lichessFetch(url, opts, tries){
+    var job = lichessQueue.then(function(){ return lichessAttempt(url, opts, tries); });
+    lichessQueue = job.then(function(){}, function(){});
+    return job;
+  }
+  function lichessAttempt(url, opts, tries){
+    var max = tries || 3, attempt = 0;
+    function once(){
+      attempt++;
+      var p = (attempt % 2 === 0) ? rawXhr(url, opts) : rawFetch(url, opts);
+      return p.then(function(res){
+        /* A 429 goes straight back to the caller — never park on it here.
+           Waiting inside the queue slot froze every later request (and
+           every section still showing "Loading…") for a full minute. */
+        if(res.status>=500 && attempt<max){
+          return waitMs(600*Math.pow(2,attempt-1)+300).then(once);
+        }
+        return asResponse(res);
+      }, function(err){
+        if(attempt<max) return waitMs(600*Math.pow(2,attempt-1)+300).then(once);
+        var e = new Error("the request to Lichess did not get through from this page after "+attempt+" tries across both fetch and XMLHttpRequest — last failure: "+((err&&err.name)||"Error")+((err&&err.message && err.message!==err.name)?" ("+err.message+")":""));
+        e.transportFailed = true;
+        throw e;
+      });
+    }
+    return once();
+  }
+  /* Sections retry themselves after a failed load instead of sitting on
+     a "Loading…" placeholder forever: one pending retry per section. */
+  function retryLater(key, fn, delay){
+    var slot = "rt_"+key;
+    if(state[slot]) return;
+    state[slot] = setTimeout(function(){ state[slot]=null; fn(); }, delay||15000);
+  }
+  function deepErr(status, txt, what){
+    var e = new Error(what+" — Lichess answered HTTP "+status+": "+bodyError(txt,status));
+    e.status = status; e.kind = (status===401) ? "invalid" : (status===403 ? "scope" : (status===429 ? "ratelimit" : "network"));
+    return e;
+  }
+  function clearDeepRetry(){ if(state.deepRetryTimer){ clearTimeout(state.deepRetryTimer); state.deepRetryTimer=null; } }
+  function scheduleDeepRetry(){
+    if(!state.token || state.deepRetries>=4) return;
+    clearDeepRetry();
+    var delays=[8000,20000,45000,90000];
+    var delay=delays[Math.min(state.deepRetries, delays.length-1)];
+    state.deepRetries++;
+    setTokenStatus("⏳ <b>Token saved on this phone — deep stats not loaded yet.</b> Lichess did not answer the last try. This page will retry by itself in about "+Math.round(delay/1000)+" seconds — keep this tab open — or tap <b>Retry deep stats</b> below to try right away. Your token stays saved either way; there is nothing to paste again.");
+    state.deepRetryTimer=setTimeout(function(){ state.deepRetryTimer=null; loadDeep(false); }, delay);
+  }
+  /* Validate the token with GET /api/account: an ordinary authenticated
+     GET whose 200 response carries Access-Control-Allow-Origin: *, and
+     whose body names the account the token belongs to. 200 = token real,
+     401 = token unknown/deleted, 403 = refused.
+     The old POST /api/token/test check was dropped on purpose: per
+     Lichess's own API spec that endpoint wants the tokens in a text/plain
+     request body with no Authorization header (it is a bulk server-side
+     testing tool, up to 1,000 tokens), and its 200 response lists no
+     Access-Control-Allow-Origin header — unlike /api/account, the user
+     and the puzzle endpoints — so a browser frequently cannot read its
+     answer even when the call itself succeeds.
+     Whether puzzle:read is ticked cannot be read cross-origin (the scope
+     response headers are not exposed to page JavaScript), so that verdict
+     comes from the puzzle dashboard itself inside loadDeep: 401 there =
+     token unknown, 403 = puzzle:read missing. The token is only ever sent
+     to lichess.org — never through any proxy or third party. */
+  function testToken(t){
+    var auth={"Accept":"application/json","Authorization":"Bearer "+t};
+    return lichessFetch("https://lichess.org/api/account",{headers:auth},3)
+      .then(function(r){
+        return r.text().then(function(txt){
+          if(r.ok){
+            var d=null; try{ d=JSON.parse(txt); }catch(e){}
+            var name=(d && (d.username||d.id)) || state.user || "";
+            return {name:name, scopes:null};
+          }
+          if(r.status===401) throw tokenErr("invalid","Lichess says this token is unknown ("+bodyError(txt,r.status)+") — so it isn't a permissions problem, the token itself reads as unknown or deleted. Create a fresh token on the Lichess page, tap Copy on the full code (it starts with lip_) and paste it here in one go.");
+          if(r.status===403) throw tokenErr("scope","Lichess refused this token (HTTP 403: "+bodyError(txt,r.status)+"). Create a new token, tick only puzzle:read, and paste that one here.");
+          if(r.status===429) throw tokenErr("network","Lichess is rate-limiting right now (HTTP 429) — too many requests in a burst. Your token has NOT been judged wrong. Wait about a minute, then tap Unlock deep stats once.");
+          throw tokenErr("network","Lichess answered the token check with "+bodyError(txt,r.status)+" (HTTP "+r.status+"). That is Lichess answering — not a verdict on your token.");
+        });
+      }, function(e){
+        throw tokenErr("network","The token check did not get through from this page — "+((e&&e.message)||"the request failed")+". Your token has NOT been judged wrong, and a token saved on this phone stays saved.");
+      });
+  }
+  function setTokenStatus(html){
+    var s=$("tokenStatus"); if(!s) return;
+    if(html){ s.innerHTML=html; s.classList.remove("hidden"); } else { s.innerHTML=""; s.classList.add("hidden"); }
+  }
+  function loadDeep(manual){
+    if(!state.token || state.deepBusy) return;
+    var rb=$("deepRetry"); if(rb) rb.classList.remove("hidden");
+    state.deepBusy=true; state.lastDeep=Date.now();
+    var pending=2;
+    var errs=[];
+    var hardVerdict=null;
+    function done(){
+      pending--; if(pending>0) return; pending=0; state.deepBusy=false;
+      if(!errs.length){
+        $("tokenError").style.display="none";
+        state.deepLoaded=true;
+        state.deepRetries=0; clearDeepRetry();
+        return;
+      }
+      if(hardVerdict){
+        /* Lichess itself refused this token (401 unknown / 403 missing
+           puzzle:read): a real verdict, not a dropped connection. Say
+           exactly that, forget the saved copy so the page stops retrying
+           a dead token, and leave the paste box ready for a fresh one. */
+        showTokenError(hardVerdict.message);
+        state.token=null; state.tokenUser=null; state.remembered=false;
+        lsDel(LS.token);
+        $("tokenDisconnect").classList.add("hidden");
+        var rb2=$("deepRetry"); if(rb2) rb2.classList.add("hidden");
+        clearDeepRetry();
+        return;
+      }
+      if(manual || state.deepRetries===0) showTokenError(errs[0]);
+      scheduleDeepRetry();
+    }
+    // dashboard 30 days
+    lichessFetch("https://lichess.org/api/puzzle/dashboard/30",{headers:authHeaders()})
+      .then(function(r){ return r.text().then(function(txt){ if(!r.ok) throw deepErr(r.status, txt, "The 30-day dashboard did not load"); return JSON.parse(txt); }); })
+      .then(function(d){
+        var g=d.global||{}; var perf=$("perfSummary");
+        /* Real dashboard fields (Lichess PuzzlePerformance): firstWins, nb, performance, puzzleRatingAvg, replayWins */
+        var gWins=(g.firstWins!=null?g.firstWins:(g.wins||0));
+        var wr = g.nb ? Math.round(gWins/g.nb*100) : null;
+        perf.innerHTML='<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13.5px;color:var(--muted)"><span>30-day puzzles <b class="mono" style="color:var(--ink)">'+fmt(g.nb)+'</b></span><span>First-try win rate <b class="mono" style="color:var(--ink)">'+(wr==null?"—":wr+"%")+'</b></span><span>Avg puzzle rating faced <b class="mono" style="color:var(--ink)">'+fmt(g.puzzleRatingAvg||g.avg||g.performance||null)+'</b></span></div>';
+        /* Lichess returns themes as an object keyed by theme id — {fork:{theme:"Fork",results:{nb,firstWins,…}}} — not an array, so normalise before sorting */
+        var rawThemes=d.themes||[];
+        var themeArr=Array.isArray(rawThemes) ? rawThemes.slice() : Object.keys(rawThemes).map(function(k){ var v=rawThemes[k]||{}; return {theme:v.theme||k, results:v.results||v}; });
+        var themes=themeArr.sort(function(a,b){ return ((b.results&&b.results.nb)||0)-((a.results&&a.results.nb)||0); }).slice(0,8);
+        $("themeDesc").textContent="Your first-try win rate by theme over the last 30 days. The shortest bar is your next training target.";
+        $("themeList").innerHTML = themes.map(function(t){
+          var res=t.results||t; var nb=res.nb||0, w=(res.firstWins!=null?res.firstWins:(res.wins||0)), p=nb?Math.round(w/nb*100):0;
+          var cls=p<45?"low":(p<60?"mid":"");
+          var rawName=String(t.theme||"Theme");
+          var name=rawName.indexOf(" ")>=0 ? rawName : rawName.replace(/([a-z0-9])([A-Z])/g,"$1 $2");
+          name=name.charAt(0).toUpperCase()+name.slice(1);
+          return '<div class="thembar"><div class="row"><span>'+name+'</span><span>'+p+'% · '+fmt(nb)+' played</span></div><div class="track"><i class="'+cls+'" style="width:'+p+'%"></i></div></div>';
+        }).join("") || '<p class="desc">No themed puzzles in the last 30 days yet.</p>';
+      }).catch(function(e){
+        if(e && e.status){ if(e.kind==="invalid"||e.kind==="scope") hardVerdict=e; errs.push(e.message+"."); }
+        else errs.push("The 30-day dashboard did not load — "+((e&&e.message)?e.message:"the request did not get through")+".");
+      })
+      .then(done);
+
+    // activity stream (NDJSON)
+    lichessFetch("https://lichess.org/api/puzzle/activity?max=220",{headers:{"Accept":"application/x-ndjson","Authorization":"Bearer "+state.token}})
+      .then(function(r){ return r.text().then(function(txt){ if(!r.ok) throw deepErr(r.status, txt, "Your puzzle activity did not load"); return txt; }); })
+      .then(function(txt){
+        var items=[]; var trimmed=(txt||"").trim();
+        if(trimmed.charAt(0)==="["){ try{ items=JSON.parse(trimmed)||[]; }catch(e){ items=[]; } }
+        else if(trimmed){ items=trimmed.split("\n").filter(Boolean).map(function(l){ try{return JSON.parse(l);}catch(e){return null;} }).filter(Boolean); }
+        state.activity=items;
+        var now=new Date(); var startDay=new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime();
+        var today=items.filter(function(a){ return a.date>=startDay; });
+        state.todayExact=today.length;
+        var wins=items.filter(function(a){return a.win;}).length;
+        var wr=items.length?Math.round(wins/items.length*100):0;
+        var cur=0; for(var i=0;i<items.length;i++){ if(items[i].win) cur++; else break; }
+        var best=0, run=0; items.forEach(function(a){ if(a.win){run++; best=Math.max(best,run);} else run=0; });
+        // day streak: consecutive days with >=1 puzzle, ending today/yesterday
+        var days={}; items.forEach(function(a){ var dt=new Date(a.date); days[dt.getFullYear()+"-"+dt.getMonth()+"-"+dt.getDate()]=true; });
+        var dstreak=0, cursor=new Date(); if(!days[cursor.getFullYear()+"-"+cursor.getMonth()+"-"+cursor.getDate()]) cursor.setDate(cursor.getDate()-1);
+        while(days[cursor.getFullYear()+"-"+cursor.getMonth()+"-"+cursor.getDate()]){ dstreak++; cursor.setDate(cursor.getDate()-1); }
+        var tiles=[
+          ["Solved today", fmt(today.length), today.filter(function(a){return a.win;}).length+" won today"],
+          ["Win rate (recent)", wr+"%", fmt(wins)+" wins in last "+fmt(items.length)+" attempts"],
+          ["Current win streak", fmt(cur), cur>=3?"You're hot. Protect it.":"Win the next one to start a run"],
+          ["Day streak", fmt(dstreak)+(dstreak===1?" day":" days"), dstreak>0?"Days in a row with puzzles — don't break the chain":"Solve one today to start"]
+        ];
+        $("deepStats").classList.remove("hidden");
+        $("deepTiles").innerHTML=tiles.map(function(t){ return '<div class="tile" style="padding:14px"><div class="k">'+t[0]+'</div><div class="v" style="font-size:26px">'+t[1]+'</div><div class="s">'+t[2]+'</div></div>'; }).join("");
+        $("tToday").textContent=fmt(today.length);
+        $("tTodaySub").textContent="Exact from your puzzle activity · "+today.filter(function(a){return a.win;}).length+" won · Day streak: "+dstreak;
+        $("flameIc").textContent = dstreak>0 ? "🔥×"+dstreak : "";
+        // refresh ring with exact today
+        if(state.profile) applyProfile(state.profile,false);
+        state.todayExact=today.length;
+        // attempts list
+        $("attemptDesc").textContent="Your "+Math.min(15,items.length)+" most recent attempts, newest first.";
+        $("attemptList").innerHTML=items.slice(0,15).map(function(a){
+          var dt=new Date(a.date);
+          var when=dt.toLocaleDateString("en-GB",{day:"numeric",month:"short"})+" "+dt.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});
+          var th=((a.puzzle&&a.puzzle.themes)||[]).slice(0,2).join(" · ");
+          return '<li><span class="res '+(a.win?"win":"loss")+'">'+(a.win?"✓":"✗")+'</span><span><b>#'+(a.puzzle?a.puzzle.id:"?")+'</b> <span class="meta">· rated '+fmt(a.puzzle?a.puzzle.rating:null)+(th?" · "+th:"")+'</span><br><span class="meta">'+when+'</span></span><a href="https://lichess.org/training/'+(a.puzzle?a.puzzle.id:"")+'" target="_blank" rel="noopener">Retry ↗</a></li>';
+        }).join("");
+        if(manual) toast("Deep stats unlocked — today, streaks, themes & attempts are live ✓");
+      }).catch(function(e){
+        if(e && e.status){ if(e.kind==="invalid"||e.kind==="scope") hardVerdict=e; errs.push(e.message+"."); }
+        else errs.push("Your puzzle activity did not load — "+((e&&e.message)?e.message:"the request did not get through")+".");
+      })
+      .then(done);
+  }
+  function showUserError(m){ var e=$("userError"); e.textContent=m; e.style.display="block"; }
+  function showTokenError(m){ var e=$("tokenError"); e.textContent=m; e.style.display="block"; }
+
+  /* ---------- WIRING ---------- */
+  function startTracking(u, isAuto){
+    if(!u) return;
+    $("userError").style.display="none";
+    $("connectBtn").textContent="Connecting…";
+    state.user=u;
+    lichessFetch("https://lichess.org/api/user/"+encodeURIComponent(u),{headers:{"Accept":"application/json"}},2)
+      .then(function(r){ if(r.status===404) throw new Error("notfound"); if(!r.ok) throw new Error("http"); return r.json(); })
+      .then(function(d){
+        state.prevTotal=null;
+        $("connectBtn").textContent="Start tracking →";
+        $("connectCard").style.display="none";
+        $("hero").classList.add("show"); $("tiles").classList.add("show"); $("grid2").classList.add("show"); $("deepGrid").classList.add("show"); $("gamesSection").classList.add("show"); $("modesSection").classList.add("show");
+        var aj=d.createdAt?Math.floor((Date.now()-d.createdAt)/86400000):null;
+        $("statAge").textContent=aj==null?"—":(aj>365?Math.floor(aj/365)+"y "+Math.floor(aj%365/30)+"m":aj+" days");
+        applyProfile(d,true);
+        fetchHistory(); fetchPerfDetails(); fetchActivityFeed(); fetchStorm();
+        if(state.token) loadDeep(false);
+        ensureTimer();
+        toast(isAuto ? "Live — tracking "+u+" ("+fmt(d.perfs&&d.perfs.puzzle?d.perfs.puzzle.games:0)+" puzzles). Solve one and watch it climb." : "Connected — tracking "+u+" live. Go solve a puzzle and watch this page.");
+        if(!isAuto) window.scrollTo({top:0,behavior:"smooth"});
+      })
+      .catch(function(e){
+        $("connectBtn").textContent="Start tracking →";
+        if(e.message==="notfound"){ showUserError("That username wasn't found on Lichess. Check the spelling — it must match your lichess.org name exactly, without the @."); return; }
+        if(isAuto && state.snapshotShown){
+          // Keep showing the verified snapshot and keep retrying live every 20s
+          $("liveText").textContent="Snapshot "+SNAPSHOT_LABEL+" · retrying live…";
+          ensureTimer();
+        } else if(!isAuto){
+          showUserError("Couldn't reach Lichess. Check your connection and try again.");
+        }
+      });
+  }
+  function ensureTimer(){
+    if(state.timer) clearInterval(state.timer);
+    state.countdown=20;
+    state.timer=setInterval(function(){
+      state.countdown--;
+      var cd=document.getElementById("cd"); if(cd) cd.textContent=state.countdown;
+      var ago=document.getElementById("chkAgo"); if(ago&&state.lastFetch) ago.textContent=timeAgo(state.lastFetch);
+      if(state.lastFetch) updateLivePill();
+      if(state.countdown<=0){ state.countdown=20; fetchProfile(true); }
+    },1000);
+  }
+  function showSnapshot(){
+    state.user=SNAPSHOT.username; state.snapshotShown=true;
+    $("connectCard").style.display="none";
+    $("hero").classList.add("show"); $("tiles").classList.add("show"); $("grid2").classList.add("show"); $("deepGrid").classList.add("show"); $("gamesSection").classList.add("show"); $("modesSection").classList.add("show");
+    renderStorm({"high":{"day":0,"week":0,"month":0,"allTime":0},"days":[]});
+    var aj=Math.floor((Date.now()-SNAPSHOT.createdAt)/86400000);
+    $("statAge").textContent=(aj>365?Math.floor(aj/365)+"y "+Math.floor((aj%365)/30)+"m":aj+" days");
+    applyProfile(SNAPSHOT,true);
+    $("chartBox").innerHTML='<p class="desc">Lichess has not published rating-history points for this account yet — it records them over time, and this chart draws itself automatically once the first points land. Your live rating above is always current.</p>';
+    $("liveDot").classList.add("on");
+    $("liveText").textContent="Snapshot "+SNAPSHOT_LABEL+" · connecting live…";
+    var sc=$("subCount"); if(sc) sc.innerHTML="<strong>"+fmt(SNAPSHOT.perfs.puzzle.games)+"</strong> puzzles · verified snapshot from Lichess ("+SNAPSHOT_LABEL+") — refreshing live now, then every 20s";
+  }
+  $("userForm").addEventListener("submit", function(ev){
+    ev.preventDefault();
+    var u=$("usernameInput").value.trim().replace(/^@/,"");
+    if(u) lsSet(LS.user, u);
+    startTracking(u, false);
+  });
+  $("changeUserBtn").addEventListener("click", function(){
+    if(state.timer) clearInterval(state.timer);
+    state.user=null; state.prevTotal=null; state.sessionSolved=0; state.todayExact=null; state.prevGames=null; state.storm=null; state.actLoaded=false; state.perfLoaded=false; state.stormLoaded=false; $("activityList").innerHTML='<p class="desc" style="margin-top:10px">Loading your recent days…</p>';
+    $("hero").classList.remove("show"); $("tiles").classList.remove("show"); $("grid2").classList.remove("show"); $("deepGrid").classList.remove("show"); $("gamesSection").classList.remove("show"); $("modesSection").classList.remove("show");
+    $("connectCard").style.display="block"; $("liveDot").classList.remove("on"); $("liveText").textContent="Not connected yet";
+  });
+  /* Refresh tells the truth: the button stays in a "Refreshing…" state
+     until the profile fetch actually resolves, the success toast only
+     fires when Lichess answered, and the slower sections refresh after
+     the counter — not in the same burst that used to invite a 429. */
+  $("refreshBtn").addEventListener("click", function(){
+    var btn=$("refreshBtn"); if(btn.disabled) return;
+    btn.disabled=true; var oldLabel=btn.textContent; btn.textContent="↻ Refreshing…";
+    fetchProfile(false).then(function(ok){
+      btn.disabled=false; btn.textContent=oldLabel;
+      if(ok){
+        toast("Refreshed from Lichess ✓");
+        fetchHistory(); fetchPerfDetails(); fetchActivityFeed(); fetchStorm();
+        if(state.token) loadDeep(false);
+      } else {
+        toast("Couldn't reach Lichess — showing the last data that loaded. It retries by itself every 20s.");
+      }
+    });
+  });
+  $("goalInput").addEventListener("change", function(){ lsSet(LS.goal, String(Math.max(1, parseInt($("goalInput").value,10)||10))); if(state.profile) applyProfile(state.profile,false); });
+  $("tokenForm").addEventListener("submit", function(ev){
+    ev.preventDefault();
+    var t=sanitizeToken($("tokenInput").value);
+    if(!t && state.token){
+      /* The box is empty because the token is already saved on this phone —
+         Unlock then simply means "load / reload my deep stats", so a retry
+         never demands a re-paste. */
+      $("tokenError").style.display="none";
+      state.deepRetries=0; clearDeepRetry();
+      setTokenStatus("⏳ <b>Using the token saved on this phone.</b> Loading your deep stats…");
+      loadDeep(true);
+      return;
+    }
+    if(!t){ showTokenError("Paste your token first — the long code from Lichess that starts with lip_."); return; }
+    $("tokenError").style.display="none";
+    setTokenStatus("⏳ <b>Checking your token with Lichess…</b> If the connection drops a request, this page retries by itself — give it a few seconds.");
+    var btn=$("tokenBtn"); var oldLabel=btn.textContent;
+    btn.disabled=true; btn.textContent="Checking token with Lichess…";
+    testToken(t)
+      .then(function(info){
+        state.token=t; state.tokenUser=info.name; state.deepRetries=0; clearDeepRetry();
+        var saved = lsSet(LS.token, t);
+        state.remembered = saved;
+        $("tokenInput").value="";
+        $("tokenDisconnect").classList.remove("hidden");
+        $("deepRetry").classList.remove("hidden");
+        var mismatch = state.user && info.name && info.name.toLowerCase()!==String(state.user).toLowerCase();
+        setTokenStatus("✓ <b>Token connected.</b> Lichess confirms this token belongs to <b>@"+info.name+"</b>. Your deep stats are loading below — they load only if <code>puzzle:read</code> is ticked on the token, and if it isn't, this page will say so plainly instead of failing quietly."+(saved?"<br><b>Remembered on this phone:</b> this browser has saved the token, so next time you open this page's link it reconnects by itself — no need to paste again.":"<br><b>Heads up:</b> this browser blocked saving (common in private mode or inside another app's built-in browser), so the token works now but may need pasting again next visit. Open this link in Chrome or Safari directly and unlock once more to make it stick.")+(mismatch?"<br>Note: the tracker above is following @"+state.user+", but this token is for @"+info.name+" — the deep stats (today, themes, attempts) will show @"+info.name+"'s puzzles.":""));
+        loadDeep(true);
+      })
+      .catch(function(e){
+        if(e && e.kind==="network"){
+          /* Don't dead-end the user on a dropped check: keep the token, save it
+             on this phone, and load the deep stats directly — their answers
+             are the real verdict (loadDeep itself retries and reports the
+             exact Lichess answer if it still fails). */
+          state.token=t; state.deepRetries=0;
+          var saved2=lsSet(LS.token,t); state.remembered=saved2;
+          $("tokenInput").value="";
+          $("tokenDisconnect").classList.remove("hidden");
+          $("deepRetry").classList.remove("hidden");
+          setTokenStatus("⏳ <b>Token saved on this phone.</b> Lichess could not confirm it just now: "+(e&&e.message?e.message:"")+" Loading your deep stats directly instead — if they appear below, you're connected.");
+          loadDeep(true);
+          return;
+        }
+        showTokenError(e&&e.message?e.message:"That token couldn't be checked. Try again.");
+      })
+      .then(function(){ btn.disabled=false; btn.textContent=oldLabel; });
+  });
+  $("deepRetry").addEventListener("click", function(){
+    if(!state.token) return;
+    $("tokenError").style.display="none";
+    state.deepRetries=0; clearDeepRetry();
+    setTokenStatus("⏳ <b>Retrying your deep stats…</b>");
+    loadDeep(true);
+  });
+  /* Coming back to this tab, or the connection coming back, is a natural
+     moment for the serialized queue to try the deep stats again. */
+  document.addEventListener("visibilitychange", function(){
+    if(!document.hidden && state.token && !state.deepLoaded && !state.deepBusy){ clearDeepRetry(); loadDeep(false); }
+  });
+  window.addEventListener("online", function(){
+    if(state.user) fetchProfile(true);
+    if(state.token && !state.deepLoaded && !state.deepBusy){ clearDeepRetry(); loadDeep(false); }
+  });
+  $("tokenDisconnect").addEventListener("click", function(){
+    state.token=null; state.tokenUser=null; state.todayExact=null; state.remembered=false;
+    lsDel(LS.token);
+    $("tokenDisconnect").classList.add("hidden");
+    clearDeepRetry(); state.deepRetries=0; state.lastDeep=0; state.deepLoaded=false;
+    var drb=$("deepRetry"); if(drb) drb.classList.add("hidden");
+    setTokenStatus("");
+    $("tokenError").style.display="none";
+    $("deepStats").classList.add("hidden");
+    $("themeDesc").textContent="Connect the token below to see win rate by puzzle theme — forks, pins, mates, endgames and more, from your last 30 days on Lichess.";
+    $("themeList").innerHTML=""; $("perfSummary").innerHTML="";
+    $("attemptDesc").textContent="Your latest puzzle attempts — wins, losses, ratings and themes — appear here with the token connected.";
+    $("attemptList").innerHTML="";
+    if(state.profile) applyProfile(state.profile,false);
+    toast("Token disconnected — this page has forgotten it.");
+  });
+
+  // Restore what this browser remembered from a previous visit (per device):
+  // saved username, daily goal, and — the big one — the token, so opening the
+  // website link reconnects the deep stats with zero pasting and no Muse sign-in.
+  (function restoreRemembered(){
+    var su=lsGet(LS.user); if(su) $("usernameInput").value=su;
+    var sg=lsGet(LS.goal); var gv=parseInt(sg,10); if(gv>=1 && gv<=500) $("goalInput").value=gv;
+    var st=sanitizeToken(lsGet(LS.token)||"");
+    if(st){
+      state.token=st; state.remembered=true;
+      $("tokenDisconnect").classList.remove("hidden");
+      setTokenStatus("✓ <b>Token remembered on this phone.</b> Reconnecting your deep stats automatically — no paste needed. Tap Disconnect token below if you ever want this browser to forget it.");
+      // Confirm with Lichess in the background; if it was revoked or lost
+      // puzzle:read meanwhile, forget it here too and say why.
+      testToken(st).then(function(info){
+        state.tokenUser=info.name;
+        setTokenStatus("✓ <b>Token connected — remembered from last time.</b> Lichess confirms this token belongs to <b>@"+info.name+"</b>. Your deep stats load automatically every visit now.");
+        $("deepRetry").classList.remove("hidden");
+        loadDeep(false);
+      }).catch(function(e){
+        if(e && e.kind==="network"){
+          /* A dropped connection is not a bad token: keep it saved on this
+             phone and try the deep stats directly — never wipe it over a
+             network hiccup. */
+          setTokenStatus("⏳ <b>Token remembered on this phone.</b> Lichess couldn't be reached to re-check it just now, so it stays saved here — your deep stats will load as soon as the connection answers. Nothing to paste again.");
+          $("deepRetry").classList.remove("hidden");
+          loadDeep(false);
+          return;
+        }
+        state.token=null; state.remembered=false; lsDel(LS.token);
+        $("tokenDisconnect").classList.add("hidden");
+        $("deepRetry").classList.add("hidden");
+        setTokenStatus("");
+        showTokenError("The token this browser remembered no longer works: "+(e&&e.message?e.message:"")+" Paste a fresh token below to reconnect — it will be remembered again.");
+      });
+    }
+  })();
+
+  /* ---------- CONNECTION TEST PANEL ----------
+     Deliberately independent of lichessFetch / the queue above: plain raw
+     fetch, run once on load, results written as plain text on the page so
+     they can be screenshotted without DevTools. Reference result (Kind,
+     Brave on his computer, page origin file://): public API OK 200
+     (274 puzzles, rating 1271), /api/account with a dummy Bearer OK —
+     Lichess answered 401 {"error":"No such token"}, proving CORS +
+     preflight + Authorization all pass there; XHR OK; httpbin OK.
+     So if these same tests FAIL from this page, the difference is this
+     page's origin/host (muse.ai, inside its iframe) — not Lichess, not
+     the browser, not the network, and not the token. The token value
+     itself is never printed, only whether Lichess answered. */
+  var connTest = { running:false, lines:[], cspIdx:-1 };
+  function connRender(){ var el=$("connLines"); if(el) el.textContent = connTest.lines.join("\n"); }
+  function connPush(text){ connTest.lines.push(text); connRender(); return connTest.lines.length-1; }
+  function connSet(idx, text){ if(idx>=0 && idx<connTest.lines.length){ connTest.lines[idx]=text; connRender(); } }
+  function connCspText(){
+    var v = window.__cspViolations || [];
+    if(!v.length) return "CSP violations: none captured so far";
+    return "CSP violations: "+v.length+" captured — "+v.map(function(x){ return "["+x.at+"] "+x.directive+" blocked "+x.blockedURI+(x.disposition?" ("+x.disposition+")":""); }).join(" · ");
+  }
+  function connTimedFetch(url, opts){
+    var started = Date.now();
+    var ctrl = ("AbortController" in window) ? new AbortController() : null;
+    var to = setTimeout(function(){ if(ctrl) ctrl.abort(); }, 12000);
+    var o = { method:"GET", headers:(opts&&opts.headers)||{}, mode:"cors", credentials:"omit", cache:"no-store", referrerPolicy:"no-referrer" };
+    if(ctrl) o.signal = ctrl.signal;
+    return fetch(url, o).then(function(r){
+      return r.text().then(function(txt){ clearTimeout(to); return {ms:Date.now()-started, status:r.status, txt:txt||""}; });
+    }, function(err){ clearTimeout(to); err._ms = Date.now()-started; throw err; });
+  }
+  function runConnectionTest(){
+    if(connTest.running) return;
+    connTest.running = true;
+    connTest.lines = [];
+    var btn = $("connRetestBtn"); if(btn) btn.disabled = true;
+    var origin = "";
+    try{ origin = window.location.origin || ""; }catch(e){ origin = ""; }
+    if(!origin || origin==="null") origin = "null — opaque origin (this page is in a sandboxed iframe, so the browser hides its real origin)";
+    connPush("origin: "+origin);
+    var inIframe;
+    try{ inIframe = (window.self !== window.top); }catch(e){ inIframe = true; }
+    connPush("in iframe: "+(inIframe ? "yes" : "no"));
+    connPush("online: "+(navigator.onLine ? "true" : "false"));
+    connTest.cspIdx = connPush(connCspText());
+    var userForTest = state.user || "aminchess4";
+    var idx1 = connPush("1 fetch lichess public, no token: running…");
+    var test1Ok = false, test2Through = null;
+    connTimedFetch("https://lichess.org/api/user/"+encodeURIComponent(userForTest), {headers:{"Accept":"application/json"}})
+      .then(function(res){
+        test1Ok = true;
+        var extra = "";
+        try{ var d = JSON.parse(res.txt); var pz = (d.perfs&&d.perfs.puzzle)||{}; if(pz.games!=null) extra = " puzzles="+pz.games+" rating="+pz.rating; }catch(e){}
+        connSet(idx1, "1 fetch lichess public, no token: OK in "+res.ms+"ms -> HTTP "+res.status+extra);
+      }, function(err){
+        connSet(idx1, "1 fetch lichess public, no token: FAIL in "+(err._ms||0)+"ms -> "+((err&&err.name)||"Error")+": "+((err&&err.message)||err));
+      })
+      .then(function(){
+        connSet(connTest.cspIdx, connCspText());
+        var savedTok = state.token || sanitizeToken(lsGet(LS.token)||"");
+        if(!savedTok){
+          connPush("2 fetch lichess /api/account, saved token: SKIPPED — no token is saved on this browser yet (paste it in the token box below, then run this test again)");
+          test2Through = false;
+          return null;
+        }
+        var idx2 = connPush("2 fetch lichess /api/account, saved token: running… (token itself is never shown)");
+        return connTimedFetch("https://lichess.org/api/account", {headers:{"Accept":"application/json","Authorization":"Bearer "+savedTok}})
+          .then(function(res){
+            test2Through = true;
+            var extra = "";
+            if(res.status===200){ try{ var d2 = JSON.parse(res.txt); extra = " account=@"+(d2.username||d2.id||"?")+" — Lichess accepts the saved token"; }catch(e){} }
+            else { extra = " body="+res.txt.slice(0,120)+" — the request got through; this HTTP status is Lichess's verdict on the token, not a connection failure"; }
+            connSet(idx2, "2 fetch lichess /api/account, saved token: ANSWERED in "+res.ms+"ms -> HTTP "+res.status+extra);
+          }, function(err){
+            test2Through = false;
+            connSet(idx2, "2 fetch lichess /api/account, saved token: FAIL in "+(err._ms||0)+"ms -> "+((err&&err.name)||"Error")+": "+((err&&err.message)||err));
+          });
+      })
+      .then(function(){
+        connSet(connTest.cspIdx, connCspText());
+        var cspHit = (window.__cspViolations||[]).length>0;
+        if(!test1Ok){
+          connPush("Verdict: Lichess is NOT reachable from THIS page's origin — yet the identical fetch passes from a file:// page in the same Brave (public API 200, token check answered 401). That points to this page's host / origin (muse.ai, in its iframe) blocking the cross-site fetch — not Lichess, not your network, and not the token."+(cspHit ? " A CSP violation was captured above, which confirms the host's security policy blocked it." : " No CSP event was captured, so the block may come from the iframe / host network policy rather than a CSP header."));
+        } else if(test2Through===false && state.token){
+          connPush("Verdict: public Lichess IS reachable from this origin, but the token request did not get through — compare line 2 above with line 1.");
+        } else {
+          connPush("Verdict: Lichess IS reachable from this page's origin right now (line 1 answered"+(test2Through ? ", and the token request was answered too" : "")+"). If the deep-stats box below still shows an error, it is not this page being blocked from Lichess.");
+        }
+        connPush("DONE — screenshot this panel if the tracker still fails.");
+        connTest.running = false;
+        if(btn) btn.disabled = false;
+      });
+  }
+  $("connRetestBtn").addEventListener("click", runConnectionTest);
+  document.addEventListener("csp-logged", function(){ if(!connTest.running) connSet(connTest.cspIdx, connCspText()); });
+
+  // Default account: aminchess4 — verified snapshot instantly, then live fetch replaces it
+  renderBoard("8/8/8/8/8/8/8/8 w - - 0 1");
+  loadDaily();
+  showSnapshot();
+  startTracking(($("usernameInput").value||"aminchess4").trim().replace(/^@/,"") || "aminchess4", true);
+  // Connection test runs on load, slightly after the first tracker fetch
+  // so the two don't collide in the same instant.
+  setTimeout(runConnectionTest, 900);
+})();
+</script>
+</body>
+</html>
