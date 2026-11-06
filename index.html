@@ -621,7 +621,7 @@
     state.profilePromise = lichessFetch("https://lichess.org/api/user/"+encodeURIComponent(state.user),{headers:{"Accept":"application/json"}},2)
       .then(function(r){ if(r.status===404) throw new Error("notfound"); if(!r.ok) throw new Error("http"+r.status); return r.json(); })
       .then(function(d){ applyProfile(d, state.prevTotal==null); /* Deep stats are heavy (dashboard + 220-attempt stream): reloading them on every 20s poll wasted Lichess rate limit and made fresh unlocks collide with a poll reload — now at most once per 2 minutes once they have loaded, never while an auto-retry is pending, and promptly while they have never loaded. */
-        if(state.token && !state.deepBusy && !state.deepRetryTimer && (!state.deepLoaded || Date.now()-(state.lastDeep||0)>120000)) loadDeep(false);
+        if(state.token && !state.deepBusy && !state.deepRetryTimer && (!state.deepLoaded || Date.now()-(state.lastDeep||0)>300000)) loadDeep(false);
         return true; })
       .catch(function(e){
         if(!silent){ showUserError(e.message==="notfound" ? "That username wasn't found on Lichess. Check the spelling — it must match your lichess.org name exactly." : "Couldn't reach Lichess just now. Check your connection and tap Refresh."); }
@@ -902,7 +902,7 @@
   function rawFetch(url, opts){
     return new Promise(function(resolve, reject){
       var ctrl = ("AbortController" in window) ? new AbortController() : null;
-      var to = setTimeout(function(){ if(ctrl) ctrl.abort(); }, 12000);
+      var to = setTimeout(function(){ if(ctrl) ctrl.abort(); }, 30000);
       var o = { method:(opts&&opts.method)||"GET", headers:(opts&&opts.headers)||{}, mode:"cors", credentials:"omit", cache:"no-store", referrerPolicy:"no-referrer" };
       if(opts && opts.body!=null) o.body = opts.body;
       if(ctrl) o.signal = ctrl.signal;
@@ -915,7 +915,7 @@
     return new Promise(function(resolve, reject){
       var x = new XMLHttpRequest();
       try{ x.open((opts&&opts.method)||"GET", url, true); }catch(e){ reject(e); return; }
-      x.timeout = 12000;
+      x.timeout = 30000;
       var h = (opts&&opts.headers)||{};
       Object.keys(h).forEach(function(k){ try{ x.setRequestHeader(k, h[k]); }catch(e){} });
       x.onload = function(){ resolve({ok:x.status>=200 && x.status<300, status:x.status, txt:x.responseText||""}); };
@@ -1076,7 +1076,7 @@
       .then(done);
 
     // activity stream (NDJSON)
-    lichessFetch("https://lichess.org/api/puzzle/activity?max=1000",{headers:{"Accept":"application/x-ndjson","Authorization":"Bearer "+state.token}})
+    lichessFetch("https://lichess.org/api/puzzle/activity?max=1000&since="+(Date.now()-14*86400000),{headers:{"Accept":"application/x-ndjson","Authorization":"Bearer "+state.token}})
       .then(function(r){ return r.text().then(function(txt){ if(!r.ok) throw deepErr(r.status, txt, "Your puzzle activity did not load"); return txt; }); })
       .then(function(txt){
         var items=[]; var trimmed=(txt||"").trim();
