@@ -279,7 +279,7 @@
   </div>
 
   <!-- WEEK FOR DAD v2 — Fri to Wed, Thursday is bonus only -->
-  <section class="arena" id="weekSection">
+  <section class="arena show" id="weekSection">
     <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
       <h3 style="font-size:26px;margin:0">This week, at a glance</h3>
       <span id="weekVs" style="font-size:15px;color:var(--muted)"></span>
@@ -1182,7 +1182,7 @@
         state.prevTotal=null;
         $("connectBtn").textContent="Start tracking →";
         $("connectCard").style.display="none";
-        $("hero").classList.add("show"); $("tiles").classList.add("show"); $("grid2").classList.add("show"); $("deepGrid").classList.add("show"); $("gamesSection").classList.add("show"); $("modesSection").classList.add("show");
+        $("hero").classList.add("show"); $("tiles").classList.add("show"); $("grid2").classList.add("show"); $("deepGrid").classList.add("show"); $("gamesSection").classList.add("show"); $("weekSection").classList.add("show"); $("modesSection").classList.add("show");
         var aj=d.createdAt?Math.floor((Date.now()-d.createdAt)/86400000):null;
         $("statAge").textContent=aj==null?"—":(aj>365?Math.floor(aj/365)+"y "+Math.floor(aj%365/30)+"m":aj+" days");
         applyProfile(d,true);
@@ -1218,7 +1218,7 @@
   function showSnapshot(){
     state.user=SNAPSHOT.username; state.snapshotShown=true;
     $("connectCard").style.display="none";
-    $("hero").classList.add("show"); $("tiles").classList.add("show"); $("grid2").classList.add("show"); $("deepGrid").classList.add("show"); $("gamesSection").classList.add("show"); $("modesSection").classList.add("show");
+    $("hero").classList.add("show"); $("tiles").classList.add("show"); $("grid2").classList.add("show"); $("deepGrid").classList.add("show"); $("gamesSection").classList.add("show"); $("weekSection").classList.add("show"); $("modesSection").classList.add("show");
     renderStorm({"high":{"day":0,"week":0,"month":0,"allTime":0},"days":[]});
     var aj=Math.floor((Date.now()-SNAPSHOT.createdAt)/86400000);
     $("statAge").textContent=(aj>365?Math.floor(aj/365)+"y "+Math.floor((aj%365)/30)+"m":aj+" days");
