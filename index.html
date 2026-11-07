@@ -261,7 +261,7 @@
           <div class="ring-c"><div><b id="ringNum">–</b><span>today</span></div></div>
         </div>
         <p id="ringText">Daily goal ring fills as today's puzzles are counted.</p>
-        <label class="goalrow">Daily goal <input type="number" id="goalInput" min="1" max="500" value="10"> puzzles</label>
+        <label class="goalrow">Daily goal <input type="number" id="goalInput" min="1" max="500" value="100"> puzzles</label>
       </div>
     </div>
     <div class="levelbar">
@@ -462,7 +462,7 @@
      by anyone (e.g. family) with no Muse account — paste once per phone/browser,
      then it reconnects by itself. Nothing is baked into the page or sent anywhere
      except lichess.org. Wrapped in try/catch: in-app/private browsers may block it. */
-  var LS = { token:"lpt_token_v1", user:"lpt_user_v1", goal:"lpt_goal_v1" };
+  var LS = { token:"lpt_token_v1", user:"lpt_user_v1", goal:"lpt_goal_v2" };
   function lsGet(k){ try{ return window.localStorage.getItem(k); }catch(e){ return null; } }
   function lsSet(k,v){ try{ window.localStorage.setItem(k,v); return window.localStorage.getItem(k)===v; }catch(e){ return false; } }
   function lsDel(k){ try{ window.localStorage.removeItem(k); }catch(e){} }
@@ -585,7 +585,7 @@
     $("tToday").textContent = fmt(todayVal);
     $("flameIc").textContent = todayVal>0 ? "🔥" : "";
     if(state.todayExact==null){ $("tTodaySub").textContent="Solved since you opened this page: "+fmt(state.sessionSolved)+". Connect the token below for the full calendar-day total + streaks."; }
-    var goal = Math.max(1, parseInt($("goalInput").value,10)||10);
+    var goal = Math.max(1, parseInt($("goalInput").value,10)||100);
     var pct = Math.min(100, Math.round(todayVal/goal*100));
     $("ringFg").style.strokeDashoffset = String(402 - 402*pct/100);
     $("ringNum").textContent = todayVal+" / "+goal;
@@ -600,7 +600,7 @@
     // milestone
     var ms=nextMilestone(total);
     $("tMile").textContent=fmt(ms);
-    $("tMileSub").textContent="Only "+fmt(ms-total)+" away. At 10/day that's about "+Math.max(1,Math.ceil((ms-total)/10))+" day"+((ms-total)>10?"s":"")+".";
+    $("tMileSub").textContent="Only "+fmt(ms-total)+" away. At "+goal+"/day that's about "+Math.max(1,Math.ceil((ms-total)/goal))+" day"+((ms-total)>goal?"s":"")+".";
     renderBadges(total);
     renderGames(data);
     updateLivePill();
@@ -1258,7 +1258,7 @@
       }
     });
   });
-  $("goalInput").addEventListener("change", function(){ lsSet(LS.goal, String(Math.max(1, parseInt($("goalInput").value,10)||10))); if(state.profile) applyProfile(state.profile,false); });
+  $("goalInput").addEventListener("change", function(){ lsSet(LS.goal, String(Math.max(1, parseInt($("goalInput").value,10)||100))); if(state.profile) applyProfile(state.profile,false); });
   $("tokenForm").addEventListener("submit", function(ev){
     ev.preventDefault();
     var t=sanitizeToken($("tokenInput").value);
