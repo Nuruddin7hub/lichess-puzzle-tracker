@@ -1083,7 +1083,7 @@
         if(trimmed.charAt(0)==="["){ try{ items=JSON.parse(trimmed)||[]; }catch(e){ items=[]; } }
         else if(trimmed){ items=trimmed.split("\n").filter(Boolean).map(function(l){ try{return JSON.parse(l);}catch(e){return null;} }).filter(Boolean); }
         state.activity=items;
-        var now=new Date(); var startDay=new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime();
+        var now=new Date(); var startDay=Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()); // Lichess days start at UTC midnight, not local midnight
         var today=items.filter(function(a){ return a.date>=startDay; });
         state.todayExact=today.length;
         var wins=items.filter(function(a){return a.win;}).length;
@@ -1091,9 +1091,9 @@
         var cur=0; for(var i=0;i<items.length;i++){ if(items[i].win) cur++; else break; }
         var best=0, run=0; items.forEach(function(a){ if(a.win){run++; best=Math.max(best,run);} else run=0; });
         // day streak: consecutive days with >=1 puzzle, ending today/yesterday
-        var days={}; items.forEach(function(a){ var dt=new Date(a.date); days[dt.getFullYear()+"-"+dt.getMonth()+"-"+dt.getDate()]=true; });
-        var dstreak=0, cursor=new Date(); if(!days[cursor.getFullYear()+"-"+cursor.getMonth()+"-"+cursor.getDate()]) cursor.setDate(cursor.getDate()-1);
-        while(days[cursor.getFullYear()+"-"+cursor.getMonth()+"-"+cursor.getDate()]){ dstreak++; cursor.setDate(cursor.getDate()-1); }
+        var days={}; items.forEach(function(a){ var dt=new Date(a.date); days[dt.getUTCFullYear()+"-"+dt.getUTCMonth()+"-"+dt.getUTCDate()]=true; });
+        var dstreak=0, cursor=new Date(); if(!days[cursor.getUTCFullYear()+"-"+cursor.getUTCMonth()+"-"+cursor.getUTCDate()]) cursor.setUTCDate(cursor.getUTCDate()-1);
+        while(days[cursor.getUTCFullYear()+"-"+cursor.getUTCMonth()+"-"+cursor.getUTCDate()]){ dstreak++; cursor.setUTCDate(cursor.getUTCDate()-1); }
         var tiles=[
           ["Solved today", fmt(today.length), today.filter(function(a){return a.win;}).length+" won today"],
           ["Win rate (recent)", wr+"%", fmt(wins)+" wins in last "+fmt(items.length)+" attempts"],
@@ -1129,7 +1129,7 @@
      club competition day, so Thursday puzzles are bonus only and never
      count in the week. If today IS Thursday, this week is the one that
      just ended on Wednesday, and today is the bonus day. */
-  function weekDayStart(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); }
+  function weekDayStart(d){ return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()); } // Lichess days start at UTC midnight
   function weekFmt(ts){ var d=new Date(ts); return d.toLocaleDateString("en-GB",{day:"numeric",month:"short"}); }
   function weekStats(items, start, end){
     var a=(items||[]).filter(function(x){ return x.date>=start && x.date<end; });
@@ -1137,7 +1137,7 @@
     return { n:a.length, acc: a.length ? Math.round(w/a.length*100) : null };
   }
   function renderWeek(){
-    var now=new Date(); var today=weekDayStart(now); var dow=now.getDay();
+    var now=new Date(); var today=weekDayStart(now); var dow=now.getUTCDay();
     var thisFri, thu;
     if(dow===4){ thisFri=today-6*86400000; thu=today; }
     else { thisFri=today-(((dow-5+7)%7))*86400000; thu=thisFri-86400000; }
