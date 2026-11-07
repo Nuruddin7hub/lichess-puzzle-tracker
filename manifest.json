@@ -1,0 +1,25 @@
+{
+  "background_color": "#0e0c0a",
+  "description": "Live Lichess puzzle counter with a Fri-Wed weekly view for dad.",
+  "display": "standalone",
+  "icons": [
+    {
+      "sizes": "any",
+      "src": "icon.svg",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "sizes": "any",
+      "src": "icon.svg",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "name": "Lichess Puzzle Tracker",
+  "orientation": "portrait",
+  "scope": "./",
+  "short_name": "Puzzle Tracker",
+  "start_url": "./",
+  "theme_color": "#0e0c0a"
+}
