@@ -498,7 +498,7 @@
      by anyone (e.g. family) with no Muse account — paste once per phone/browser,
      then it reconnects by itself. Nothing is baked into the page or sent anywhere
      except lichess.org. Wrapped in try/catch: in-app/private browsers may block it. */
-  var LS = { token:"lpt_token_v1", user:"lpt_user_v1", goal:"lpt_goal_v3" };
+  var LS = { token:"lpt_token_v1", user:"lpt_user_v1", goal:"lpt_goal_v3", today:"lpt_today_v1" };
   function lsGet(k){ try{ return window.localStorage.getItem(k); }catch(e){ return null; } }
   function lsSet(k,v){ try{ window.localStorage.setItem(k,v); return window.localStorage.getItem(k)===v; }catch(e){ return false; } }
   function lsDel(k){ try{ window.localStorage.removeItem(k); }catch(e){} }
@@ -616,11 +616,18 @@
     else { $("progBadge").innerHTML=""; }
     $("tRD").textContent = pz.rd!=null ? "±"+pz.rd : "—";
 
-    // today: exact (token) else session-based
-    var todayVal = (state.todayExact!=null) ? state.todayExact : state.sessionSolved;
+    // today: exact (token) else last counted today (saved on this phone)
+    // else session-based — never show 0 just because the refresh failed
+    var savedToday=null;
+    try{ var stJ=JSON.parse(lsGet(LS.today)||"null"); if(stJ && stJ.d===new Date().toISOString().slice(0,10) && typeof stJ.n==="number") savedToday=stJ.n; }catch(e){}
+    var todayVal = (state.todayExact!=null) ? state.todayExact : (savedToday!=null ? savedToday : state.sessionSolved);
+    var todayStale = (state.todayExact==null && savedToday!=null);
     $("tToday").textContent = fmt(todayVal);
     $("flameIc").textContent = todayVal>0 ? "🔥" : "";
-    if(state.todayExact==null){ $("tTodaySub").textContent="Solved since you opened this page: "+fmt(state.sessionSolved)+". Connect the token below for the full calendar-day total + streaks."; }
+    if(state.todayExact==null){
+      if(todayStale){ $("tTodaySub").textContent="Last counted today: "+fmt(savedToday)+" — Lichess did not answer just now, so this is the last good count. Tap Retry deep stats to refresh it."; }
+      else { $("tTodaySub").textContent="Solved since you opened this page: "+fmt(state.sessionSolved)+". Connect the token below for the full calendar-day total + streaks."; }
+    }
     var goal = Math.max(1, parseInt($("goalInput").value,10)||200);
     var pct = Math.min(100, Math.round(todayVal/goal*100));
     $("ringFg").style.strokeDashoffset = String(402 - 402*pct/100);
@@ -897,7 +904,7 @@
        - attempts rotate between fetch() and XMLHttpRequest — different
          browser code paths, so a context that breaks one often passes
          the other;
-       - every attempt has a 12s timeout, so a request that stalls
+       - every attempt has a 30s timeout (60s for the big puzzle-activity stream), so a request that stalls
          (rather than failing fast) is aborted and retried instead of
          hanging the load forever;
        - requests are sent with credentials omitted, no referrer and
@@ -938,7 +945,8 @@
   function rawFetch(url, opts){
     return new Promise(function(resolve, reject){
       var ctrl = ("AbortController" in window) ? new AbortController() : null;
-      var to = setTimeout(function(){ if(ctrl) ctrl.abort(); }, 30000);
+      var ms = (opts && opts.timeoutMs) || 30000;
+      var to = setTimeout(function(){ if(ctrl) ctrl.abort(); }, ms);
       var o = { method:(opts&&opts.method)||"GET", headers:(opts&&opts.headers)||{}, mode:"cors", credentials:"omit", cache:"no-store", referrerPolicy:"no-referrer" };
       if(opts && opts.body!=null) o.body = opts.body;
       if(ctrl) o.signal = ctrl.signal;
@@ -951,7 +959,7 @@
     return new Promise(function(resolve, reject){
       var x = new XMLHttpRequest();
       try{ x.open((opts&&opts.method)||"GET", url, true); }catch(e){ reject(e); return; }
-      x.timeout = 30000;
+      x.timeout = (opts && opts.timeoutMs) || 30000;
       var h = (opts&&opts.headers)||{};
       Object.keys(h).forEach(function(k){ try{ x.setRequestHeader(k, h[k]); }catch(e){} });
       x.onload = function(){ resolve({ok:x.status>=200 && x.status<300, status:x.status, txt:x.responseText||""}); };
@@ -1113,7 +1121,7 @@
       .then(done);
 
     // activity stream (NDJSON)
-    lichessFetch("https://lichess.org/api/puzzle/activity?max=1000&since="+(Date.now()-14*86400000),{headers:{"Accept":"application/x-ndjson","Authorization":"Bearer "+state.token}})
+    lichessFetch("https://lichess.org/api/puzzle/activity?max=1000&since="+(Date.now()-14*86400000),{headers:{"Accept":"application/x-ndjson","Authorization":"Bearer "+state.token}, timeoutMs:60000})
       .then(function(r){ return r.text().then(function(txt){ if(!r.ok) throw deepErr(r.status, txt, "Your puzzle activity did not load"); return txt; }); })
       .then(function(txt){
         var items=[]; var trimmed=(txt||"").trim();
@@ -1123,6 +1131,7 @@
         var now=new Date(); var startDay=Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()); // Lichess days start at UTC midnight, not local midnight
         var today=items.filter(function(a){ return a.date>=startDay; });
         state.todayExact=today.length;
+        try{ lsSet(LS.today, JSON.stringify({d:new Date().toISOString().slice(0,10), n:today.length})); }catch(e){}
         var wins=items.filter(function(a){return a.win;}).length;
         var wr=items.length?Math.round(wins/items.length*100):0;
         var cur=0; for(var i=0;i<items.length;i++){ if(items[i].win) cur++; else break; }
@@ -1417,6 +1426,7 @@
   $("tokenDisconnect").addEventListener("click", function(){
     state.token=null; state.tokenUser=null; state.todayExact=null; state.remembered=false;
     lsDel(LS.token);
+    lsDel(LS.today);
     $("tokenDisconnect").classList.add("hidden");
     clearDeepRetry(); state.deepRetries=0; state.lastDeep=0; state.deepLoaded=false;
     var drb=$("deepRetry"); if(drb) drb.classList.add("hidden");
@@ -1452,7 +1462,9 @@
       // puzzle:read meanwhile, forget it here too and say why.
       testToken(st).then(function(info){
         state.tokenUser=info.name;
-        setTokenStatus("✓ <b>Token connected — remembered from last time.</b> Lichess confirms this token belongs to <b>@"+info.name+"</b>. Your deep stats load automatically every visit now.");
+        /* Don't clobber a deep-stats retry countdown that is already
+           showing — the token is confirmed, the stats are still loading. */
+        if(!state.deepRetryTimer) setTokenStatus("✓ <b>Token connected — remembered from last time.</b> Lichess confirms this token belongs to <b>@"+info.name+"</b>. Your deep stats load automatically every visit now.");
       }).catch(function(e){
         if(e && e.kind==="network"){
           return;
