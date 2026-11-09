@@ -226,8 +226,16 @@
   /* CONNECTION TEST PANEL */
 
   .foot{margin-top:26px;color:var(--faint);font-size:12.5px;line-height:1.6;text-align:center}
-  .toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,80px);background:var(--ink);color:var(--bg);font-weight:700;padding:13px 20px;border-radius:999px;box-shadow:var(--shadow);transition:.35s;z-index:50;font-size:15px;max-width:92vw;text-align:center}
+  .toast{position:fixed;left:50%;bottom:92px;transform:translate(-50%,80px);background:var(--ink);color:var(--bg);font-weight:700;padding:13px 20px;border-radius:999px;box-shadow:var(--shadow);transition:.35s;z-index:50;font-size:15px;max-width:92vw;text-align:center}
   .toast.show{transform:translate(-50%,0)}
+  /* Bottom nav — one-tap jumps to any section. Fixed, thumb-friendly,
+     and the page gets bottom padding so it never covers the footer. */
+  body{padding-bottom:92px}
+  .bottomnav{position:fixed;left:0;right:0;bottom:0;z-index:60;background:rgba(22,19,17,.93);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+  .bottomnav .row{max-width:640px;margin:0 auto;display:flex}
+  .bottomnav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 0 8px;color:var(--muted);text-decoration:none;font-size:11.5px;letter-spacing:.03em;border-top:2px solid transparent;min-width:0}
+  .bottomnav a i{font-style:normal;font-size:17px;line-height:1.2}
+  .bottomnav a.on{color:var(--gold);border-top-color:var(--gold)}
   .hidden{display:none!important}
 </style>
 </head>
@@ -442,10 +450,24 @@
     </div>
   </div>
 
+  <!-- WRONG PUZZLES -->
+  <section class="arena show" id="wrongSection">
+    <div class="sec-head">
+      <div><h3>Wrong puzzles</h3><p>Your wrong puzzles from the last 14 days, newest first. Tap “Load older wrong puzzles” to go further back.</p></div>
+    </div>
+    <p class="desc" id="wrongLockedNote" style="margin-top:10px">Connect the token below to see your wrong puzzles — they come from the same puzzle activity as the deep stats.</p>
+    <ul class="attempts" id="wrongList"></ul>
+    <p class="desc" id="wrongEmpty" style="display:none">No wrong puzzles yet — solve puzzles on Lichess and they will appear here.</p>
+    <div style="margin-top:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <button class="btn ghost small hidden" id="wrongLoadOlder" type="button">Load older wrong puzzles</button>
+      <span class="desc" id="wrongHiddenNote" style="display:none"></span>
+    </div>
+  </section>
+
   <!-- TOKEN -->
   <section class="tokenbox" id="tokenBox">
     <h3>🔓 Unlock the deep stats — free, 1 minute, step by step</h3>
-    <p class="locked-note">The live counter above needs no login. But <b>today's exact count, win rate, win streaks, theme strengths and recent attempts</b> are private on Lichess — they need a read-only token from your own account:</p>
+    <p class="locked-note">The live counter above needs no login. But <b>today's exact count, win rate, win streaks, theme strengths, recent attempts and wrong puzzles</b> are private on Lichess — they need a read-only token from your own account:</p>
     <p class="locked-note" style="margin-top:8px"><b>Games, Storm, Streak and Racer need no token and no extra box</b> — they're public and already live above. So when Lichess shows the scope list, tick <b>only</b> <code>puzzle:read</code>: no other box adds anything to this tracker, the rest would only give the token powers it doesn't need (playing moves, sending challenges, messages).</p>
     <ol>
       <li>Open <a href="https://lichess.org/account/oauth/token" target="_blank" rel="noopener">lichess.org/account/oauth/token</a> and sign in if asked.</li>
@@ -483,6 +505,17 @@
   </section>
 
   <p class="foot">Data comes live from the official Lichess API — <a href="https://lichess.org/api" target="_blank" rel="noopener">lichess.org/api</a> · Public stats: <span class="mono">/api/user</span> &amp; rating history · Games &amp; modes (public): <span class="mono">/api/user/{user}/perf</span>, <span class="mono">/api/user/{user}/activity</span> &amp; <span class="mono">/api/storm/dashboard</span> · Private deep stats (with your token): <span class="mono">/api/puzzle/activity</span> &amp; <span class="mono">/api/puzzle/dashboard</span> · Auto-refresh every 20s (Lichess has no push feed, so ~20s is true real-time here) · Bismillah — one puzzle at a time.</p>
+
+  <nav class="bottomnav" aria-label="Sections">
+    <div class="row">
+      <a href="#hero" id="navToday"><i>🎯</i>Today</a>
+      <a href="#weekSection" id="navWeek"><i>📅</i>Week</a>
+      <a href="#masterySection" id="navMastery"><i>🕸️</i>Mastery</a>
+      <a href="#gamesSection" id="navArena"><i>⚔️</i>Arena</a>
+      <a href="#wrongSection" id="navWrong"><i>🔁</i>Wrong</a>
+      <a href="#tokenBox" id="navToken"><i>🔑</i>Token</a>
+    </div>
+  </nav>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -491,14 +524,14 @@
 (function(){
   "use strict";
   var $ = function(id){ return document.getElementById(id); };
-  var state = { user:null, profile:null, total:0, prevTotal:null, sessionStartTotal:null, sessionSolved:0, token:null, tokenUser:null, remembered:false, deepBusy:false, deepLoaded:false, profileBusy:false, profilePromise:null, actLoaded:false, perfLoaded:false, stormLoaded:false, lastDeep:0, deepRetryTimer:null, deepRetries:0, activity:[], todayExact:null, timer:null, countdown:20, lastFetch:null, prevGames:null, storm:null };
+  var state = { user:null, profile:null, total:0, prevTotal:null, sessionStartTotal:null, sessionSolved:0, token:null, tokenUser:null, remembered:false, deepBusy:false, deepLoaded:false, profileBusy:false, profilePromise:null, actLoaded:false, perfLoaded:false, stormLoaded:false, lastDeep:0, deepRetryTimer:null, deepRetries:0, activity:[], todayExact:null, timer:null, countdown:20, lastFetch:null, prevGames:null, storm:null, wrongAll:[], wrongOldest:null, wrongDone:{}, wrongBusy:false };
 
   /* Remember-me storage: the token (and username/goal) live in THIS browser's
      local storage on THIS device only, so the public website link can be opened
      by anyone (e.g. family) with no Muse account — paste once per phone/browser,
      then it reconnects by itself. Nothing is baked into the page or sent anywhere
      except lichess.org. Wrapped in try/catch: in-app/private browsers may block it. */
-  var LS = { token:"lpt_token_v1", user:"lpt_user_v1", goal:"lpt_goal_v3", today:"lpt_today_v1" };
+  var LS = { token:"lpt_token_v1", user:"lpt_user_v1", goal:"lpt_goal_v3", today:"lpt_today_v1", done:"lpt_done_v1" };
   function lsGet(k){ try{ return window.localStorage.getItem(k); }catch(e){ return null; } }
   function lsSet(k,v){ try{ window.localStorage.setItem(k,v); return window.localStorage.getItem(k)===v; }catch(e){ return false; } }
   function lsDel(k){ try{ window.localStorage.removeItem(k); }catch(e){} }
@@ -1162,6 +1195,11 @@
           var th=((a.puzzle&&a.puzzle.themes)||[]).slice(0,2).join(" · ");
           return '<li><span class="res '+(a.win?"win":"loss")+'">'+(a.win?"✓":"✗")+'</span><span><b>#'+(a.puzzle?a.puzzle.id:"?")+'</b> <span class="meta">· rated '+fmt(a.puzzle?a.puzzle.rating:null)+(th?" · "+th:"")+'</span><br><span class="meta">'+when+'</span></span><a href="https://lichess.org/training/'+(a.puzzle?a.puzzle.id:"")+'" target="_blank" rel="noopener">Retry ↗</a></li>';
         }).join("");
+        // wrong puzzles list (plain list, no Anki)
+        state.wrongAll=items.filter(function(a){ return !a.win; });
+        state.wrongOldest=items.length?items[items.length-1].date:null;
+        var wln=$("wrongLockedNote"); if(wln) wln.style.display="none";
+        renderWrong();
         renderWeek();
         if(manual) toast("Deep stats unlocked — today, streaks, themes & attempts are live ✓");
       }).catch(function(e){
@@ -1170,6 +1208,79 @@
       })
       .then(done);
   }
+  /* ---------- WRONG PUZZLES — plain list, no Anki ----------
+     Wrong = a puzzle-activity item with win=false. Each row has a Retry
+     link and a Done button: tap Done after retrying it and it hides from
+     this list (saved on this phone only). No scheduling, no intervals,
+     no review queue — just the list. */
+  function wrongDoneLoad(){
+    try{ var raw=lsGet(LS.done); state.wrongDone=raw?JSON.parse(raw):{}; }catch(e){ state.wrongDone={}; }
+    if(!state.wrongDone || typeof state.wrongDone!=="object") state.wrongDone={};
+  }
+  function wrongDoneSave(){ try{ lsSet(LS.done, JSON.stringify(state.wrongDone)); }catch(e){} }
+  function wrongRow(a){
+    var dt=new Date(a.date);
+    var when=dt.toLocaleDateString("en-GB",{day:"numeric",month:"short"})+" "+dt.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});
+    var th=((a.puzzle&&a.puzzle.themes)||[]).slice(0,2).join(" · ");
+    var id=a.puzzle?a.puzzle.id:"";
+    return '<li><span class="res loss">✗</span><span><b>#'+id+'</b> <span class="meta">· rated '+fmt(a.puzzle?a.puzzle.rating:null)+(th?" · "+th:"")+'</span><br><span class="meta">'+when+'</span></span><a href="https://lichess.org/training/'+id+'" target="_blank" rel="noopener">Retry ↗</a><button class="btn ghost small" type="button" data-wrong-done="'+id+'">Done ✓</button></li>';
+  }
+  function renderWrong(){
+    wrongDoneLoad();
+    var list=(state.wrongAll||[]).filter(function(a){ var id=a.puzzle&&a.puzzle.id; return id && !state.wrongDone[id]; });
+    var hidden=0; (state.wrongAll||[]).forEach(function(a){ var id=a.puzzle&&a.puzzle.id; if(id && state.wrongDone[id]) hidden++; });
+    $("wrongList").innerHTML=list.map(wrongRow).join("");
+    $("wrongEmpty").style.display=list.length?"none":"";
+    var hn=$("wrongHiddenNote");
+    if(hidden>0){ hn.style.display=""; hn.innerHTML=hidden+" hidden · <a href=\"#\" id=\"wrongShowHidden\">show them again</a>"; }
+    else { hn.style.display="none"; hn.innerHTML=""; }
+    $("wrongLoadOlder").classList.toggle("hidden", !state.wrongOldest);
+  }
+  function resetWrong(){
+    state.wrongAll=[]; state.wrongOldest=null; state.wrongBusy=false;
+    $("wrongList").innerHTML=""; $("wrongEmpty").style.display="none";
+    $("wrongLoadOlder").classList.add("hidden");
+    $("wrongHiddenNote").style.display="none";
+    var ln=$("wrongLockedNote"); if(ln) ln.style.display="";
+  }
+  function wrongLoadOlder(){
+    if(!state.token || state.wrongBusy || !state.wrongOldest) return;
+    state.wrongBusy=true;
+    var btn=$("wrongLoadOlder"); btn.textContent="Loading…"; btn.disabled=true;
+    lichessFetch("https://lichess.org/api/puzzle/activity?max=1000&before="+state.wrongOldest,{headers:{"Accept":"application/x-ndjson","Authorization":"Bearer "+state.token}, timeoutMs:60000})
+      .then(function(r){ return r.text().then(function(txt){ if(!r.ok) throw new Error("http"+r.status); return txt; }); })
+      .then(function(txt){
+        var items=[]; var trimmed=(txt||"").trim();
+        if(trimmed.charAt(0)==="["){ try{ items=JSON.parse(trimmed)||[]; }catch(e){ items=[]; } }
+        else if(trimmed){ items=trimmed.split("\n").filter(Boolean).map(function(l){ try{return JSON.parse(l);}catch(e){return null;} }).filter(Boolean); }
+        var seen={}; state.wrongAll.forEach(function(a){ var id=a.puzzle&&a.puzzle.id; if(id) seen[id]=true; });
+        var fresh=0;
+        items.forEach(function(a){
+          var id=a.puzzle&&a.puzzle.id;
+          if(!a.win && id && !seen[id]){ seen[id]=true; state.wrongAll.push(a); fresh++; }
+        });
+        if(items.length) state.wrongOldest=items[items.length-1].date;
+        else { state.wrongOldest=null; toast("That's as far back as it goes — no older wrong puzzles."); }
+        renderWrong();
+        if(fresh===0 && items.length) toast("No more wrong puzzles in that batch — tap again for older ones.");
+      }).catch(function(){
+        toast("Could not load older wrong puzzles just now — try again.");
+      }).then(function(){
+        state.wrongBusy=false; btn.textContent="Load older wrong puzzles"; btn.disabled=false;
+      });
+  }
+  $("wrongList").addEventListener("click", function(ev){
+    var b=ev.target.closest("[data-wrong-done]");
+    if(!b) return;
+    wrongDoneLoad();
+    state.wrongDone[b.getAttribute("data-wrong-done")]=true;
+    wrongDoneSave();
+    renderWrong();
+  });
+  $("wrongHiddenNote").addEventListener("click", function(ev){
+    if(ev.target && ev.target.id==="wrongShowHidden"){ ev.preventDefault(); state.wrongDone={}; wrongDoneSave(); renderWrong(); }
+  });
+  $("wrongLoadOlder").addEventListener("click", wrongLoadOlder);
   /* ---------- WEEK FOR DAD: Fri–Wed, Thursday = bonus ----------
      A week runs Friday 00:00 to Wednesday 24:00 (local time). Thursday is
      club competition day, so Thursday puzzles are bonus only and never
@@ -1332,6 +1443,7 @@
     state.user=null; state.prevTotal=null; state.sessionSolved=0; state.todayExact=null; state.prevGames=null; state.storm=null; state.actLoaded=false; state.perfLoaded=false; state.stormLoaded=false; $("activityList").innerHTML='<p class="desc" style="margin-top:10px">Loading your recent days…</p>';
     $("hero").classList.remove("show"); $("tiles").classList.remove("show"); $("grid2").classList.remove("show"); $("deepGrid").classList.remove("show"); $("gamesSection").classList.remove("show"); $("modesSection").classList.remove("show");
     $("connectCard").style.display="block"; $("liveDot").classList.remove("on"); $("liveText").textContent="Not connected yet";
+    resetWrong();
   });
   /* Refresh tells the truth: the button stays in a "Refreshing…" state
      until the profile fetch actually resolves, the success toast only
@@ -1438,6 +1550,7 @@
     renderRadar(null); $("radarDesc").textContent="Connect the token below to see your puzzle mastery web — one spoke per theme, from your last 30 days on Lichess.";
     $("attemptDesc").textContent="Your latest puzzle attempts — wins, losses, ratings and themes — appear here with the token connected.";
     $("attemptList").innerHTML="";
+    resetWrong();
     if(state.profile) applyProfile(state.profile,false);
     toast("Token disconnected — this page has forgotten it.");
   });
@@ -1480,12 +1593,34 @@
 
   renderRadar(null);
   renderWeek();
+  /* Bottom nav scroll spy — highlights the section you are looking at.
+     The anchor links themselves do the smooth jump (html has
+     scroll-behavior:smooth); this only moves the gold highlight. The
+     "current" section is the last one whose top has passed a line 120px
+     down the screen — i.e. the section actually being looked at. */
+  var NAV=[["hero","navToday"],["weekSection","navWeek"],["masterySection","navMastery"],["gamesSection","navArena"],["wrongSection","navWrong"],["tokenBox","navToken"]];
+  function navSpy(){
+    var cur=NAV[0][1];
+    var mid=window.scrollY+120;
+    NAV.forEach(function(pair){
+      var el=document.getElementById(pair[0]);
+      if(!el || el.offsetParent===null) return; // hidden section — skip it
+      var top=el.getBoundingClientRect().top+window.scrollY;
+      if(top<=mid) cur=pair[1];
+    });
+    NAV.forEach(function(pair){ var b=document.getElementById(pair[1]); if(b) b.classList.toggle("on", pair[1]===cur); });
+  }
+  window.addEventListener("scroll", navSpy, {passive:true});
+  window.addEventListener("resize", navSpy);
+  navSpy();
+  setTimeout(navSpy, 600); // re-check once the first live load has settled
   if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(function(){}); }
   // Default account: aminchess4 — verified snapshot instantly, then live fetch replaces it
   renderBoard("8/8/8/8/8/8/8/8 w - - 0 1");
   loadDaily();
   showSnapshot();
   startTracking(($("usernameInput").value||"aminchess4").trim().replace(/^@/,"") || "aminchess4", true);
+  navSpy(); // sections are shown now — highlight the right nav item
 })();
 </script>
 </body>
